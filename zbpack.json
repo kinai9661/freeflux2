@@ -1,7 +1,7 @@
 {
   "build_command": "npm install",
   "start_command": "npm start",
-  "install_command": "npm ci --production",
+  "install_command": "npm install --production",
   "node_version": "20",
   "output_dir": "public",
   "serverless": true,
