@@ -1,0 +1,12 @@
+{
+  "build_command": "npm install",
+  "start_command": "npm start",
+  "install_command": "npm ci --production",
+  "node_version": "20",
+  "output_dir": "public",
+  "serverless": true,
+  "timeout": 30,
+  "env": {
+    "NODE_ENV": "production"
+  }
+}
