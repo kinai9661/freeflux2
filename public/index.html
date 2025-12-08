@@ -1,0 +1,248 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Typli API - Zeabur Edition</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gray-900 text-white min-h-screen">
+    <div class="container mx-auto p-4 md:p-8 max-w-6xl">
+        <!-- Header -->
+        <div class="bg-gradient-to-r from-blue-600 to-purple-600 rounded-lg p-6 mb-6 shadow-lg">
+            <h1 class="text-3xl md:text-4xl font-bold mb-2">🚀 Typli API Server</h1>
+            <p class="text-blue-100">Deployed on Zeabur Free Tier | OpenAI Compatible API</p>
+            <div class="mt-4 flex gap-2 flex-wrap">
+                <span class="bg-white/20 px-3 py-1 rounded-full text-sm">Grok-4</span>
+                <span class="bg-white/20 px-3 py-1 rounded-full text-sm">FLUX 2</span>
+                <span class="bg-white/20 px-3 py-1 rounded-full text-sm">Claude</span>
+                <span class="bg-white/20 px-3 py-1 rounded-full text-sm">GPT-5</span>
+            </div>
+        </div>
+
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+            <!-- API Endpoint -->
+            <div class="bg-gray-800 rounded-lg p-6 shadow-lg">
+                <h2 class="text-xl font-bold mb-4 flex items-center">
+                    📡 API Endpoint
+                </h2>
+                <div class="space-y-3">
+                    <div>
+                        <label class="text-sm text-gray-400">Chat Completions</label>
+                        <code id="chat-url" class="block bg-gray-900 p-3 rounded cursor-pointer hover:bg-gray-700 transition text-sm break-all" onclick="copyText('chat-url')">
+                            https://your-service.zeabur.app/v1/chat/completions
+                        </code>
+                    </div>
+                    <div>
+                        <label class="text-sm text-gray-400">Models List</label>
+                        <code id="models-url" class="block bg-gray-900 p-3 rounded cursor-pointer hover:bg-gray-700 transition text-sm break-all" onclick="copyText('models-url')">
+                            https://your-service.zeabur.app/v1/models
+                        </code>
+                    </div>
+                    <p class="text-xs text-gray-500 mt-2">✏️ Click to copy</p>
+                </div>
+            </div>
+
+            <!-- Quick Test -->
+            <div class="bg-gray-800 rounded-lg p-6 shadow-lg">
+                <h2 class="text-xl font-bold mb-4">⚡ Quick Test</h2>
+                <div class="space-y-3">
+                    <select id="test-model" class="w-full bg-gray-900 rounded p-2 text-sm">
+                        <option value="xai/grok-4-fast">Grok-4 Fast</option>
+                        <option value="openai/gpt-4o">GPT-4o</option>
+                        <option value="fal-ai/flux-2">FLUX 2 (Image)</option>
+                    </select>
+                    <input id="prompt" class="w-full bg-gray-900 rounded p-2 text-sm" placeholder="输入提示词..." value="Hello, who are you?">
+                    <button onclick="testAPI()" class="w-full bg-blue-600 hover:bg-blue-700 rounded p-2 font-semibold transition">
+                        🚀 Send Test
+                    </button>
+                    <pre id="result" class="bg-gray-900 p-3 rounded text-xs max-h-48 overflow-auto hidden"></pre>
+                </div>
+            </div>
+        </div>
+
+        <!-- Usage Metrics -->
+        <div class="bg-gray-800 rounded-lg p-6 shadow-lg mb-6">
+            <h2 class="text-xl font-bold mb-4">📊 Usage Metrics</h2>
+            <div class="grid grid-cols-2 md:grid-cols-4 gap-4" id="metrics">
+                <div class="bg-gray-900 p-4 rounded">
+                    <p class="text-gray-400 text-sm">总请求数</p>
+                    <p class="text-2xl font-bold" id="total-requests">-</p>
+                </div>
+                <div class="bg-gray-900 p-4 rounded">
+                    <p class="text-gray-400 text-sm">流量使用</p>
+                    <p class="text-2xl font-bold" id="bandwidth">-</p>
+                </div>
+                <div class="bg-gray-900 p-4 rounded">
+                    <p class="text-gray-400 text-sm">运行时间</p>
+                    <p class="text-2xl font-bold" id="uptime">-</p>
+                </div>
+                <div class="bg-gray-900 p-4 rounded">
+                    <p class="text-gray-400 text-sm">预估费用</p>
+                    <p class="text-2xl font-bold text-green-400" id="cost">-</p>
+                </div>
+            </div>
+            <div class="mt-4 bg-gray-900 rounded p-4">
+                <div class="flex justify-between items-center mb-2">
+                    <span class="text-sm text-gray-400">Free Tier Usage</span>
+                    <span class="text-sm" id="free-tier-text">0 GB / 10 GB</span>
+                </div>
+                <div class="w-full bg-gray-700 rounded-full h-2">
+                    <div id="usage-bar" class="bg-green-500 h-2 rounded-full transition-all" style="width: 0%"></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Documentation -->
+        <div class="bg-gray-800 rounded-lg p-6 shadow-lg">
+            <h2 class="text-xl font-bold mb-4">📚 Quick Start</h2>
+            <div class="space-y-4">
+                <div>
+                    <h3 class="font-semibold mb-2">cURL Example:</h3>
+                    <pre class="bg-gray-900 p-4 rounded text-xs overflow-x-auto"><code>curl https://your-service.zeabur.app/v1/chat/completions \\
+  -H "Content-Type: application/json" \\
+  -H "Authorization: Bearer 1" \\
+  -d '{
+    "model": "xai/grok-4-fast",
+    "messages": [{"role": "user", "content": "Hello!"}],
+    "stream": true
+  }'</code></pre>
+                </div>
+                <div>
+                    <h3 class="font-semibold mb-2">Python Example:</h3>
+                    <pre class="bg-gray-900 p-4 rounded text-xs overflow-x-auto"><code>from openai import OpenAI
+
+client = OpenAI(
+    api_key="1",
+    base_url="https://your-service.zeabur.app/v1"
+)
+
+response = client.chat.completions.create(
+    model="xai/grok-4-fast",
+    messages=[{"role": "user", "content": "Hello!"}]
+)
+print(response.choices[0].message.content)</code></pre>
+                </div>
+            </div>
+        </div>
+
+        <!-- Footer -->
+        <div class="mt-8 text-center text-gray-500 text-sm">
+            <p>Powered by Typli | Deployed on <a href="https://zeabur.com" class="text-blue-400 hover:underline" target="_blank">Zeabur</a></p>
+            <p class="mt-1">Open Source on <a href="https://github.com/kinai9661/typli-api-zeabur" class="text-blue-400 hover:underline" target="_blank">GitHub</a></p>
+        </div>
+    </div>
+
+    <script>
+        const API_BASE = window.location.origin;
+        
+        // Update URLs
+        document.getElementById('chat-url').textContent = `${API_BASE}/v1/chat/completions`;
+        document.getElementById('models-url').textContent = `${API_BASE}/v1/models`;
+
+        function copyText(elementId) {
+            const text = document.getElementById(elementId).textContent;
+            navigator.clipboard.writeText(text);
+            alert('✅ Copied to clipboard!');
+        }
+
+        async function testAPI() {
+            const model = document.getElementById('test-model').value;
+            const prompt = document.getElementById('prompt').value;
+            const resultEl = document.getElementById('result');
+            
+            resultEl.classList.remove('hidden');
+            resultEl.textContent = 'Loading...';
+
+            try {
+                const response = await fetch(`${API_BASE}/v1/chat/completions`, {
+                    method: 'POST',
+                    headers: { 
+                        'Content-Type': 'application/json',
+                        'Authorization': 'Bearer 1'
+                    },
+                    body: JSON.stringify({
+                        model: model,
+                        messages: [{ role: 'user', content: prompt }],
+                        stream: false
+                    })
+                });
+
+                if (response.headers.get('content-type').includes('text/event-stream')) {
+                    // Handle streaming
+                    const reader = response.body.getReader();
+                    const decoder = new TextDecoder();
+                    let fullText = '';
+                    
+                    while (true) {
+                        const { done, value } = await reader.read();
+                        if (done) break;
+                        
+                        const chunk = decoder.decode(value);
+                        const lines = chunk.split('\n');
+                        
+                        for (const line of lines) {
+                            if (line.startsWith('data: ')) {
+                                const data = line.slice(6);
+                                if (data === '[DONE]') continue;
+                                try {
+                                    const parsed = JSON.parse(data);
+                                    const content = parsed.choices[0]?.delta?.content || '';
+                                    fullText += content;
+                                    resultEl.textContent = fullText;
+                                } catch (e) {}
+                            }
+                        }
+                    }
+                } else {
+                    const data = await response.json();
+                    resultEl.textContent = JSON.stringify(data, null, 2);
+                }
+            } catch (e) {
+                resultEl.textContent = `Error: ${e.message}`;
+            }
+        }
+
+        // Fetch and update metrics
+        async function updateMetrics() {
+            try {
+                const res = await fetch(`${API_BASE}/health`);
+                const data = await res.json();
+                
+                if (data.metrics) {
+                    document.getElementById('total-requests').textContent = data.metrics.requests || 0;
+                    document.getElementById('bandwidth').textContent = data.metrics.bandwidth || '0 MB';
+                    document.getElementById('uptime').textContent = formatUptime(data.uptime || 0);
+                    document.getElementById('cost').textContent = data.metrics.estimated_cost || '$0';
+                    
+                    const usedGB = data.metrics.bandwidth_gb || 0;
+                    const percentage = Math.min((usedGB / 10) * 100, 100);
+                    document.getElementById('usage-bar').style.width = `${percentage}%`;
+                    document.getElementById('free-tier-text').textContent = `${usedGB.toFixed(2)} GB / 10 GB`;
+                    
+                    // Change color if approaching limit
+                    const bar = document.getElementById('usage-bar');
+                    if (percentage > 80) bar.className = bar.className.replace('bg-green-500', 'bg-red-500');
+                    else if (percentage > 50) bar.className = bar.className.replace('bg-green-500', 'bg-yellow-500');
+                }
+            } catch (e) {
+                console.error('Failed to fetch metrics:', e);
+            }
+        }
+
+        function formatUptime(seconds) {
+            const days = Math.floor(seconds / 86400);
+            const hours = Math.floor((seconds % 86400) / 3600);
+            const minutes = Math.floor((seconds % 3600) / 60);
+            
+            if (days > 0) return `${days}d ${hours}h`;
+            if (hours > 0) return `${hours}h ${minutes}m`;
+            return `${minutes}m`;
+        }
+
+        // Update metrics every 5 seconds
+        updateMetrics();
+        setInterval(updateMetrics, 5000);
+    </script>
+</body>
+</html>
