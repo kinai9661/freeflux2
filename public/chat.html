@@ -57,6 +57,27 @@
         @keyframes spin {
             to { transform: rotate(360deg); }
         }
+        .gallery-item {
+            position: relative;
+            overflow: hidden;
+        }
+        .gallery-item:hover .gallery-overlay {
+            opacity: 1;
+        }
+        .gallery-overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0,0,0,0.7);
+            opacity: 0;
+            transition: opacity 0.3s;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 0.5rem;
+        }
     </style>
 </head>
 <body class="bg-gray-900 text-white">
@@ -75,6 +96,10 @@
                     <button onclick="switchMode('image')" id="btn-image"
                         class="px-4 py-2 rounded-lg bg-gray-700 hover:bg-gray-600 transition">
                         🎨 文生图
+                    </button>
+                    <button onclick="switchMode('history')" id="btn-history"
+                        class="px-4 py-2 rounded-lg bg-gray-700 hover:bg-gray-600 transition">
+                        🖼️ 历史
                     </button>
                 </div>
             </div>
@@ -111,14 +136,12 @@
             <!-- 聊天模式 -->
             <div id="chat-mode" class="flex-1 flex flex-col">
                 <div id="messages" class="flex-1 overflow-y-auto p-4 space-y-4">
-                    <!-- 欢迎消息 -->
                     <div class="text-center py-20">
                         <h2 class="text-3xl font-bold mb-4">👋 你好！</h2>
                         <p class="text-gray-400">选择一个模型开始对话</p>
                     </div>
                 </div>
                 
-                <!-- 输入框 -->
                 <div class="border-t border-gray-700 p-4 bg-gray-800">
                     <div class="max-w-4xl mx-auto flex gap-2">
                         <textarea id="chat-input" rows="1" 
@@ -136,16 +159,32 @@
             <!-- 文生图模式 -->
             <div id="image-mode" class="hidden flex-1 flex flex-col">
                 <div class="flex-1 overflow-y-auto p-4">
-                    <div class="max-w-4xl mx-auto">
+                    <div class="max-w-6xl mx-auto">
                         <!-- 生成的图片展示 -->
-                        <div id="generated-images" class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
-                            <!-- 图片卡片 -->
-                        </div>
+                        <div id="generated-images" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mb-6"></div>
                         
                         <!-- 空状态 -->
                         <div id="image-empty" class="text-center py-20">
                             <h2 class="text-3xl font-bold mb-4">🎨 AI 绘画</h2>
-                            <p class="text-gray-400">输入提示词生成图片</p>
+                            <p class="text-gray-400 mb-6">输入提示词生成图片</p>
+                            <div class="grid grid-cols-2 md:grid-cols-4 gap-3 max-w-2xl mx-auto">
+                                <button onclick="setPrompt('一只可爱的小猫咖')"
+                                    class="bg-gray-800 hover:bg-gray-700 rounded-lg p-3 transition">
+                                    🐱 可爱小猫
+                                </button>
+                                <button onclick="setPrompt('未来科幻城市')"
+                                    class="bg-gray-800 hover:bg-gray-700 rounded-lg p-3 transition">
+                                    🌆 科幻城市
+                                </button>
+                                <button onclick="setPrompt('幻想风景画')"
+                                    class="bg-gray-800 hover:bg-gray-700 rounded-lg p-3 transition">
+                                    🌄 风景画
+                                </button>
+                                <button onclick="setPrompt('抽象艺术作品')"
+                                    class="bg-gray-800 hover:bg-gray-700 rounded-lg p-3 transition">
+                                    🎨 抽象艺术
+                                </button>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -155,16 +194,45 @@
                     <div class="max-w-4xl mx-auto space-y-3">
                         <textarea id="image-prompt" rows="2"
                             class="w-full bg-gray-700 rounded-lg px-4 py-3 resize-none focus:outline-none focus:ring-2 focus:ring-purple-500"
-                            placeholder="描述你想要的图片..."></textarea>
+                            placeholder="描述你想要的图片... (支持中英文)"></textarea>
                         <div class="flex gap-2">
                             <button onclick="generateImage()" id="gen-btn"
                                 class="flex-1 bg-purple-600 hover:bg-purple-700 rounded-lg px-6 py-3 transition font-semibold">
                                 🎨 生成图片
                             </button>
-                            <button onclick="clearImages()"
-                                class="bg-gray-700 hover:bg-gray-600 rounded-lg px-6 py-3 transition">
-                                清空
+                            <button onclick="randomPrompt()"
+                                class="bg-gray-700 hover:bg-gray-600 rounded-lg px-4 py-3 transition">
+                                🎲 随机
                             </button>
+                            <button onclick="clearImages()"
+                                class="bg-gray-700 hover:bg-gray-600 rounded-lg px-4 py-3 transition">
+                                🗑️ 清空
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 历史记录模式 -->
+            <div id="history-mode" class="hidden flex-1 flex flex-col">
+                <div class="flex-1 overflow-y-auto p-4">
+                    <div class="max-w-6xl mx-auto">
+                        <div class="flex justify-between items-center mb-6">
+                            <h2 class="text-2xl font-bold">🖼️ 图片历史</h2>
+                            <div class="flex gap-2">
+                                <button onclick="exportHistory()" 
+                                    class="bg-blue-600 hover:bg-blue-700 rounded-lg px-4 py-2 transition text-sm">
+                                    📥 导出
+                                </button>
+                                <button onclick="clearHistory()" 
+                                    class="bg-red-600 hover:bg-red-700 rounded-lg px-4 py-2 transition text-sm">
+                                    🗑️ 清空历史
+                                </button>
+                            </div>
+                        </div>
+                        <div id="history-grid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4"></div>
+                        <div id="history-empty" class="text-center py-20">
+                            <p class="text-gray-400">暂无历史记录</p>
                         </div>
                     </div>
                 </div>
@@ -221,11 +289,39 @@
                     <div>
                         <label class="block text-sm text-gray-400 mb-2">图片模型</label>
                         <select id="image-model" class="w-full bg-gray-700 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-purple-500">
-                            <option value="fal-ai/flux-2-pro">FLUX 2 Pro (最高质量)</option>
-                            <option value="fal-ai/flux-2" selected>FLUX 2 (推荐)</option>
-                            <option value="fal-ai/flux-2-dev">FLUX 2 Dev</option>
-                            <option value="fal-ai/nano-banana-pro">Nano Banana Pro</option>
-                            <option value="fal-ai/stable-diffusion-v35-large">Stable Diffusion v3.5</option>
+                            <option value="fal-ai/flux-2-pro">FLUX 2 Pro 🏆</option>
+                            <option value="fal-ai/flux-2" selected>FLUX 2 ⚡</option>
+                            <option value="fal-ai/flux-2-dev">FLUX 2 Dev 🎨</option>
+                            <option value="fal-ai/nano-banana-pro">Nano Banana 🍌</option>
+                            <option value="fal-ai/stable-diffusion-v35-large">SD v3.5 🖼️</option>
+                        </select>
+                    </div>
+
+                    <div>
+                        <label class="block text-sm text-gray-400 mb-2">图像风格</label>
+                        <select id="image-style" class="w-full bg-gray-700 rounded-lg px-3 py-2">
+                            <option value="">无（默认）</option>
+                            <option value="realistic">📸 写实风格</option>
+                            <option value="anime">🌸 动漫风格</option>
+                            <option value="oil-painting">🖼️ 油画风格</option>
+                            <option value="watercolor">🎨 水彩风格</option>
+                            <option value="3d-render">🎮 3D渲染</option>
+                            <option value="pixel-art">🔲 像素艺术</option>
+                            <option value="cyberpunk">🌆 赛博朋克</option>
+                            <option value="fantasy">✨ 幻想风格</option>
+                        </select>
+                    </div>
+
+                    <div>
+                        <label class="block text-sm text-gray-400 mb-2">图片尺寸</label>
+                        <select id="image-size" class="w-full bg-gray-700 rounded-lg px-3 py-2">
+                            <option value="1024x1024" selected>正方形 (1024x1024)</option>
+                            <option value="1024x768">横向 4:3 (1024x768)</option>
+                            <option value="768x1024">竖向 3:4 (768x1024)</option>
+                            <option value="1920x1080">横向 16:9 (1920x1080)</option>
+                            <option value="1080x1920">竖向 9:16 (1080x1920)</option>
+                            <option value="1280x720">HD (1280x720)</option>
+                            <option value="512x512">小图 (512x512)</option>
                         </select>
                     </div>
 
@@ -238,6 +334,39 @@
                             <option value="4">4 张</option>
                         </select>
                     </div>
+
+                    <div>
+                        <label class="flex items-center gap-2">
+                            <input type="checkbox" id="save-history" checked class="rounded">
+                            <span class="text-sm">保存到历史</span>
+                        </label>
+                    </div>
+
+                    <div>
+                        <label class="flex items-center gap-2">
+                            <input type="checkbox" id="enhance-prompt" class="rounded">
+                            <span class="text-sm">智能增强提示词</span>
+                        </label>
+                    </div>
+                </div>
+
+                <!-- 历史设置 -->
+                <div id="history-settings" class="hidden space-y-4">
+                    <h3 class="font-bold text-lg mb-3">📊 统计信息</h3>
+                    <div class="bg-gray-900 rounded-lg p-3 space-y-2">
+                        <div class="flex justify-between text-sm">
+                            <span class="text-gray-400">总图片数</span>
+                            <span id="total-images" class="font-bold">0</span>
+                        </div>
+                        <div class="flex justify-between text-sm">
+                            <span class="text-gray-400">存储大小</span>
+                            <span id="storage-size" class="font-bold">0 KB</span>
+                        </div>
+                        <div class="flex justify-between text-sm">
+                            <span class="text-gray-400">最早记录</span>
+                            <span id="first-record" class="font-bold text-xs">-</span>
+                        </div>
+                    </div>
                 </div>
             </div>
         </aside>
@@ -248,6 +377,41 @@
         let currentMode = 'chat';
         let messages = [];
         let isGenerating = false;
+        let imageHistory = [];
+
+        // 加载历史记录
+        function loadHistory() {
+            try {
+                const saved = localStorage.getItem('image_history');
+                if (saved) {
+                    imageHistory = JSON.parse(saved);
+                    updateHistoryStats();
+                }
+            } catch (e) {
+                console.warn('加载历史失败:', e);
+            }
+        }
+
+        // 保存历史记录
+        function saveHistory() {
+            try {
+                localStorage.setItem('image_history', JSON.stringify(imageHistory));
+                updateHistoryStats();
+            } catch (e) {
+                console.warn('保存历史失败:', e);
+            }
+        }
+
+        // 更新统计信息
+        function updateHistoryStats() {
+            document.getElementById('total-images').textContent = imageHistory.length;
+            const size = JSON.stringify(imageHistory).length;
+            document.getElementById('storage-size').textContent = (size / 1024).toFixed(2) + ' KB';
+            if (imageHistory.length > 0) {
+                const first = new Date(imageHistory[0].timestamp);
+                document.getElementById('first-record').textContent = first.toLocaleDateString();
+            }
+        }
 
         // Marked 配置
         if (typeof marked !== 'undefined') {
@@ -269,25 +433,124 @@
         function switchMode(mode) {
             currentMode = mode;
             
+            // 隐藏所有模式
+            document.getElementById('chat-mode').classList.add('hidden');
+            document.getElementById('image-mode').classList.add('hidden');
+            document.getElementById('history-mode').classList.add('hidden');
+            
+            // 隐藏所有设置
+            document.getElementById('chat-settings').classList.add('hidden');
+            document.getElementById('image-settings').classList.add('hidden');
+            document.getElementById('history-settings').classList.add('hidden');
+            
+            // 重置按钮样式
+            document.getElementById('btn-chat').className = 'px-4 py-2 rounded-lg bg-gray-700 hover:bg-gray-600 transition';
+            document.getElementById('btn-image').className = 'px-4 py-2 rounded-lg bg-gray-700 hover:bg-gray-600 transition';
+            document.getElementById('btn-history').className = 'px-4 py-2 rounded-lg bg-gray-700 hover:bg-gray-600 transition';
+            
             if (mode === 'chat') {
                 document.getElementById('chat-mode').classList.remove('hidden');
-                document.getElementById('image-mode').classList.add('hidden');
                 document.getElementById('chat-settings').classList.remove('hidden');
-                document.getElementById('image-settings').classList.add('hidden');
-                document.getElementById('btn-chat').classList.add('bg-blue-600');
-                document.getElementById('btn-chat').classList.remove('bg-gray-700');
-                document.getElementById('btn-image').classList.remove('bg-blue-600');
-                document.getElementById('btn-image').classList.add('bg-gray-700');
-            } else {
-                document.getElementById('chat-mode').classList.add('hidden');
+                document.getElementById('btn-chat').className = 'px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-700 transition';
+            } else if (mode === 'image') {
                 document.getElementById('image-mode').classList.remove('hidden');
-                document.getElementById('chat-settings').classList.add('hidden');
                 document.getElementById('image-settings').classList.remove('hidden');
-                document.getElementById('btn-image').classList.add('bg-blue-600');
-                document.getElementById('btn-image').classList.remove('bg-gray-700');
-                document.getElementById('btn-chat').classList.remove('bg-blue-600');
-                document.getElementById('btn-chat').classList.add('bg-gray-700');
+                document.getElementById('btn-image').className = 'px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-700 transition';
+            } else if (mode === 'history') {
+                document.getElementById('history-mode').classList.remove('hidden');
+                document.getElementById('history-settings').classList.remove('hidden');
+                document.getElementById('btn-history').className = 'px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-700 transition';
+                renderHistory();
             }
+        }
+
+        // 渲染历史记录
+        function renderHistory() {
+            const grid = document.getElementById('history-grid');
+            const empty = document.getElementById('history-empty');
+            
+            if (imageHistory.length === 0) {
+                grid.innerHTML = '';
+                empty.classList.remove('hidden');
+                return;
+            }
+            
+            empty.classList.add('hidden');
+            grid.innerHTML = imageHistory.reverse().map(item => `
+                <div class="bg-gray-800 rounded-lg overflow-hidden border border-gray-700 gallery-item">
+                    <img src="${escapeHtml(item.url)}" alt="${escapeHtml(item.prompt)}" 
+                         class="w-full aspect-square object-cover" loading="lazy">
+                    <div class="gallery-overlay">
+                        <button onclick="downloadImage('${escapeHtml(item.url)}', '${escapeHtml(item.prompt)}')"
+                            class="bg-blue-600 hover:bg-blue-700 rounded-lg px-3 py-2 text-sm">
+                            ⬇️ 下载
+                        </button>
+                        <button onclick="deleteHistoryItem('${item.id}')"
+                            class="bg-red-600 hover:bg-red-700 rounded-lg px-3 py-2 text-sm">
+                            🗑️ 删除
+                        </button>
+                    </div>
+                    <div class="p-3">
+                        <p class="text-xs text-gray-400 line-clamp-2 mb-2">${escapeHtml(item.prompt)}</p>
+                        <div class="flex justify-between text-xs text-gray-500">
+                            <span>${item.model}</span>
+                            <span>${new Date(item.timestamp).toLocaleDateString()}</span>
+                        </div>
+                    </div>
+                </div>
+            `).join('');
+        }
+
+        // 删除历史记录
+        function deleteHistoryItem(id) {
+            if (confirm('确定要删除这条记录吗？')) {
+                imageHistory = imageHistory.filter(item => item.id !== id);
+                saveHistory();
+                renderHistory();
+            }
+        }
+
+        // 清空历史
+        function clearHistory() {
+            if (confirm('确定要清空所有历史记录吗？')) {
+                imageHistory = [];
+                saveHistory();
+                renderHistory();
+            }
+        }
+
+        // 导出历史
+        function exportHistory() {
+            const dataStr = JSON.stringify(imageHistory, null, 2);
+            const dataBlob = new Blob([dataStr], {type: 'application/json'});
+            const url = URL.createObjectURL(dataBlob);
+            const link = document.createElement('a');
+            link.href = url;
+            link.download = `image_history_${Date.now()}.json`;
+            link.click();
+            URL.revokeObjectURL(url);
+        }
+
+        // 设置提示词
+        function setPrompt(text) {
+            document.getElementById('image-prompt').value = text;
+            switchMode('image');
+        }
+
+        // 随机提示词
+        function randomPrompt() {
+            const prompts = [
+                '一只戴着太空头盔的猫咉航员',
+                '未来赛博朋克风格的东京街道',
+                '梦幻般的水下城市，满是生物发光植物',
+                '一个精致的蒸汽朋克机器人',
+                '魔法森林中的古老图书馆',
+                '太空中漂浮的巨大水晶城堡',
+                '赛博朋克风的龙，机械翅膀',
+                '幻想风景，满天星空下的山脉'
+            ];
+            const random = prompts[Math.floor(Math.random() * prompts.length)];
+            document.getElementById('image-prompt').value = random;
         }
 
         // 发送聊天消息
@@ -300,12 +563,10 @@
             const temperature = parseFloat(document.getElementById('temperature').value);
             const stream = document.getElementById('stream').checked;
 
-            // 添加用户消息
             addMessage('user', content);
             input.value = '';
             input.style.height = 'auto';
 
-            // 添加助手消息占位
             const assistantMsgId = addMessage('assistant', '');
             isGenerating = true;
             updateSendButton(true);
@@ -369,9 +630,7 @@
                                 const content = parsed.choices?.[0]?.delta?.content || '';
                                 fullText += content;
                                 updateMessage(messageId, fullText);
-                            } catch (e) {
-                                console.warn('Parse error:', e);
-                            }
+                            } catch (e) {}
                         }
                     }
                 }
@@ -438,13 +697,36 @@
             }
         }
 
-        // 生成图片（修复版）
+        // 生成图片
         async function generateImage() {
-            const prompt = document.getElementById('image-prompt').value.trim();
+            let prompt = document.getElementById('image-prompt').value.trim();
             if (!prompt || isGenerating) return;
 
             const model = document.getElementById('image-model').value;
+            const style = document.getElementById('image-style').value;
+            const size = document.getElementById('image-size').value;
             const numImages = parseInt(document.getElementById('num-images').value);
+            const saveToHistory = document.getElementById('save-history').checked;
+            const enhancePrompt = document.getElementById('enhance-prompt').checked;
+
+            // 增强提示词
+            if (style) {
+                const styleMap = {
+                    'realistic': 'photorealistic, highly detailed, 8k',
+                    'anime': 'anime style, detailed, vibrant colors',
+                    'oil-painting': 'oil painting style, classical art',
+                    'watercolor': 'watercolor painting, soft colors',
+                    '3d-render': '3D render, octane render, highly detailed',
+                    'pixel-art': 'pixel art style, retro gaming aesthetic',
+                    'cyberpunk': 'cyberpunk style, neon lights, futuristic',
+                    'fantasy': 'fantasy art, magical, ethereal'
+                };
+                prompt = `${prompt}, ${styleMap[style]}`;
+            }
+
+            if (enhancePrompt) {
+                prompt = `${prompt}, masterpiece, best quality, highly detailed`;
+            }
             
             document.getElementById('image-empty').classList.add('hidden');
             isGenerating = true;
@@ -463,7 +745,7 @@
                         body: JSON.stringify({
                             model: model,
                             messages: [{role: 'user', content: prompt}],
-                            stream: false  // 强制非流式
+                            stream: false
                         })
                     });
 
@@ -471,25 +753,34 @@
                         throw new Error(`HTTP ${response.status}`);
                     }
 
-                    // 检查响应类型
                     const contentType = response.headers.get('content-type') || '';
                     let content = '';
 
                     if (contentType.includes('text/event-stream')) {
-                        // 处理流式响应
                         content = await handleImageStreamResponse(response);
                     } else {
-                        // 处理 JSON 响应
                         const data = await response.json();
                         content = data.choices?.[0]?.message?.content || '';
                     }
                     
-                    // 提取图片 URL
                     const urlMatch = content.match(/!\[.*?\]\((https?:\/\/[^\)]+)\)/);
                     if (urlMatch) {
                         updateImageCard(cardId, urlMatch[1], prompt);
+                        
+                        // 保存到历史
+                        if (saveToHistory) {
+                            imageHistory.push({
+                                id: `img_${Date.now()}_${i}`,
+                                url: urlMatch[1],
+                                prompt: document.getElementById('image-prompt').value,
+                                model: model,
+                                style: style,
+                                size: size,
+                                timestamp: Date.now()
+                            });
+                            saveHistory();
+                        }
                     } else {
-                        // 尝试直接提取 URL（某些响应可能只返回 URL）
                         const directUrl = content.match(/https?:\/\/[^\s]+/);
                         if (directUrl) {
                             updateImageCard(cardId, directUrl[0], prompt);
@@ -531,9 +822,7 @@
                                 const content = parsed.choices?.[0]?.delta?.content || 
                                               parsed.choices?.[0]?.message?.content || '';
                                 fullText += content;
-                            } catch (e) {
-                                console.warn('Parse chunk error:', e, 'Data:', data);
-                            }
+                            } catch (e) {}
                         }
                     }
                 }
@@ -583,15 +872,18 @@
             }
 
             card.innerHTML = `
-                <img src="${escapeHtml(url)}" alt="${escapeHtml(prompt)}" class="w-full aspect-square object-cover" loading="lazy" onerror="this.parentElement.innerHTML='<div class=\'aspect-square bg-red-900/20 flex items-center justify-center\'><p class=\'text-red-400\'>图片加载失败</p></div>'">
+                <img src="${escapeHtml(url)}" alt="${escapeHtml(prompt)}" class="w-full aspect-square object-cover" loading="lazy">
                 <div class="p-3">
                     <p class="text-sm text-gray-400 line-clamp-2 mb-2">${escapeHtml(prompt)}</p>
                     <div class="flex gap-2">
                         <a href="${escapeHtml(url)}" download target="_blank" class="flex-1 text-center bg-blue-600 hover:bg-blue-700 rounded px-3 py-1 text-sm transition">
-                            ⬇️ 下载
+                            ⬇️
                         </a>
                         <button onclick="copyImageUrl('${escapeHtml(url)}')" class="flex-1 bg-gray-700 hover:bg-gray-600 rounded px-3 py-1 text-sm transition">
-                            📋 复制链接
+                            📋
+                        </button>
+                        <button onclick="shareImage('${escapeHtml(url)}', '${escapeHtml(prompt)}')" class="flex-1 bg-gray-700 hover:bg-gray-600 rounded px-3 py-1 text-sm transition">
+                            🔗
                         </button>
                     </div>
                 </div>
@@ -605,6 +897,28 @@
             }).catch(err => {
                 console.error('复制失败:', err);
             });
+        }
+
+        // 分享图片
+        function shareImage(url, prompt) {
+            if (navigator.share) {
+                navigator.share({
+                    title: 'AI 生成图片',
+                    text: prompt,
+                    url: url
+                }).catch(err => console.log('Share failed:', err));
+            } else {
+                copyImageUrl(url);
+            }
+        }
+
+        // 下载图片
+        function downloadImage(url, filename) {
+            const link = document.createElement('a');
+            link.href = url;
+            link.download = `${filename.substring(0, 50)}.png`;
+            link.target = '_blank';
+            link.click();
         }
 
         // 更新发送按钮状态
@@ -650,7 +964,7 @@
 
         // 清空图片
         function clearImages() {
-            if (confirm('确定要清空所有图片吗？')) {
+            if (confirm('确定要清空当前所有图片吗？')) {
                 document.getElementById('generated-images').innerHTML = '';
                 document.getElementById('image-empty').classList.remove('hidden');
             }
@@ -679,6 +993,7 @@
         // 初始化
         window.onload = () => {
             console.log('WebUI loaded successfully');
+            loadHistory();
             switchMode('chat');
         };
 
