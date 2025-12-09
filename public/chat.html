@@ -6,6 +6,8 @@
     <title>Typli Chat & Image Generator</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github-dark.min.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
     <script>
         tailwind.config = {
             darkMode: 'class',
@@ -31,6 +33,11 @@
             background: #374151;
             padding: 0.2rem 0.4rem;
             border-radius: 0.25rem;
+            font-family: 'Courier New', monospace;
+        }
+        .message-content pre code {
+            background: transparent;
+            padding: 0;
         }
         .fade-in {
             animation: fadeIn 0.3s ease-in;
@@ -38,6 +45,17 @@
         @keyframes fadeIn {
             from { opacity: 0; transform: translateY(10px); }
             to { opacity: 1; transform: translateY(0); }
+        }
+        .spinner {
+            border: 3px solid rgba(255,255,255,0.3);
+            border-top-color: #3b82f6;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+        }
+        @keyframes spin {
+            to { transform: rotate(360deg); }
         }
     </style>
 </head>
@@ -82,8 +100,8 @@
                     class="w-full bg-blue-600 hover:bg-blue-700 rounded-lg px-4 py-2 mb-4 transition">
                     ➕ 新建对话
                 </button>
-                <div id="history-list" class="space-y-2">
-                    <!-- 历史记录列表 -->
+                <div class="text-center text-gray-500 text-sm py-4">
+                    对话历史（暂未保存）
                 </div>
             </div>
         </aside>
@@ -107,7 +125,7 @@
                             class="flex-1 bg-gray-700 rounded-lg px-4 py-3 resize-none focus:outline-none focus:ring-2 focus:ring-blue-500"
                             placeholder="输入消息... (Shift+Enter 换行)"
                             onkeydown="handleChatKeydown(event)"></textarea>
-                        <button onclick="sendMessage()" 
+                        <button onclick="sendMessage()" id="send-btn"
                             class="bg-blue-600 hover:bg-blue-700 rounded-lg px-6 py-3 transition font-semibold">
                             发送
                         </button>
@@ -139,7 +157,7 @@
                             class="w-full bg-gray-700 rounded-lg px-4 py-3 resize-none focus:outline-none focus:ring-2 focus:ring-purple-500"
                             placeholder="描述你想要的图片..."></textarea>
                         <div class="flex gap-2">
-                            <button onclick="generateImage()" 
+                            <button onclick="generateImage()" id="gen-btn"
                                 class="flex-1 bg-purple-600 hover:bg-purple-700 rounded-lg px-6 py-3 transition font-semibold">
                                 🎨 生成图片
                             </button>
@@ -231,6 +249,22 @@
         let messages = [];
         let isGenerating = false;
 
+        // Marked 配置
+        if (typeof marked !== 'undefined') {
+            marked.setOptions({
+                highlight: function(code, lang) {
+                    if (typeof hljs !== 'undefined' && lang && hljs.getLanguage(lang)) {
+                        try {
+                            return hljs.highlight(code, { language: lang }).value;
+                        } catch (e) {}
+                    }
+                    return code;
+                },
+                breaks: true,
+                gfm: true
+            });
+        }
+
         // 模式切换
         function switchMode(mode) {
             currentMode = mode;
@@ -274,6 +308,7 @@
             // 添加助手消息占位
             const assistantMsgId = addMessage('assistant', '');
             isGenerating = true;
+            updateSendButton(true);
 
             try {
                 const response = await fetch(`${API_BASE}/v1/chat/completions`, {
@@ -284,23 +319,29 @@
                     },
                     body: JSON.stringify({
                         model: model,
-                        messages: messages.map(m => ({role: m.role, content: m.content})),
+                        messages: messages.filter(m => m.content).map(m => ({role: m.role, content: m.content})),
                         temperature: temperature,
                         stream: stream
                     })
                 });
 
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                }
+
                 if (stream) {
                     await handleStreamResponse(response, assistantMsgId);
                 } else {
                     const data = await response.json();
-                    const content = data.choices[0].message.content;
+                    const content = data.choices?.[0]?.message?.content || '❓ 无响应';
                     updateMessage(assistantMsgId, content);
                 }
             } catch (error) {
+                console.error('Chat error:', error);
                 updateMessage(assistantMsgId, `❌ 错误: ${error.message}`);
             } finally {
                 isGenerating = false;
+                updateSendButton(false);
             }
         }
 
@@ -310,26 +351,33 @@
             const decoder = new TextDecoder();
             let fullText = '';
 
-            while (true) {
-                const {done, value} = await reader.read();
-                if (done) break;
+            try {
+                while (true) {
+                    const {done, value} = await reader.read();
+                    if (done) break;
 
-                const chunk = decoder.decode(value);
-                const lines = chunk.split('\n');
+                    const chunk = decoder.decode(value, {stream: true});
+                    const lines = chunk.split('\n');
 
-                for (const line of lines) {
-                    if (line.startsWith('data: ')) {
-                        const data = line.slice(6);
-                        if (data === '[DONE]') continue;
-                        
-                        try {
-                            const parsed = JSON.parse(data);
-                            const content = parsed.choices[0]?.delta?.content || '';
-                            fullText += content;
-                            updateMessage(messageId, fullText);
-                        } catch (e) {}
+                    for (const line of lines) {
+                        if (line.startsWith('data: ')) {
+                            const data = line.slice(6).trim();
+                            if (data === '[DONE]') continue;
+                            
+                            try {
+                                const parsed = JSON.parse(data);
+                                const content = parsed.choices?.[0]?.delta?.content || '';
+                                fullText += content;
+                                updateMessage(messageId, fullText);
+                            } catch (e) {
+                                console.warn('Parse error:', e);
+                            }
+                        }
                     }
                 }
+            } catch (e) {
+                console.error('Stream error:', e);
+                throw e;
             }
         }
 
@@ -337,7 +385,12 @@
         function addMessage(role, content) {
             const id = Date.now();
             messages.push({id, role, content});
-            
+            renderMessages();
+            return id;
+        }
+
+        // 渲染所有消息
+        function renderMessages() {
             const messagesDiv = document.getElementById('messages');
             messagesDiv.innerHTML = '';
 
@@ -353,18 +406,19 @@
                         : 'bg-gray-800 border border-gray-700'
                 }`;
                 
-                bubble.innerHTML = `
-                    <div class="message-content ${msg.role === 'user' ? '' : 'prose prose-invert max-w-none'}">
-                        ${msg.role === 'user' ? escapeHtml(msg.content) : marked.parse(msg.content || '⏳ 思考中...')}
-                    </div>
-                `;
+                let content = msg.content || '⏳ 思考中...';
+                if (msg.role === 'assistant' && typeof marked !== 'undefined') {
+                    content = marked.parse(content);
+                } else if (msg.role === 'user') {
+                    content = escapeHtml(content);
+                }
                 
+                bubble.innerHTML = `<div class="message-content">${content}</div>`;
                 div.appendChild(bubble);
                 messagesDiv.appendChild(div);
             });
 
             messagesDiv.scrollTop = messagesDiv.scrollHeight;
-            return id;
         }
 
         // 更新消息内容
@@ -375,7 +429,11 @@
                 const msgEl = document.getElementById(`msg-${id}`);
                 if (msgEl) {
                     const contentEl = msgEl.querySelector('.message-content');
-                    contentEl.innerHTML = marked.parse(content);
+                    if (typeof marked !== 'undefined') {
+                        contentEl.innerHTML = marked.parse(content);
+                    } else {
+                        contentEl.textContent = content;
+                    }
                 }
             }
         }
@@ -390,6 +448,7 @@
             
             document.getElementById('image-empty').classList.add('hidden');
             isGenerating = true;
+            updateGenButton(true);
 
             for (let i = 0; i < numImages; i++) {
                 const cardId = addImagePlaceholder();
@@ -407,22 +466,28 @@
                         })
                     });
 
+                    if (!response.ok) {
+                        throw new Error(`HTTP ${response.status}`);
+                    }
+
                     const data = await response.json();
-                    const content = data.choices[0].message.content;
+                    const content = data.choices?.[0]?.message?.content || '';
                     
                     // 提取图片 URL
                     const urlMatch = content.match(/!\[.*?\]\((https?:\/\/.*?)\)/);
                     if (urlMatch) {
                         updateImageCard(cardId, urlMatch[1], prompt);
                     } else {
-                        updateImageCard(cardId, null, prompt, '生成失败');
+                        updateImageCard(cardId, null, prompt, '无法提取图片 URL');
                     }
                 } catch (error) {
+                    console.error('Image generation error:', error);
                     updateImageCard(cardId, null, prompt, error.message);
                 }
             }
 
             isGenerating = false;
+            updateGenButton(false);
         }
 
         // 添加图片占位卡片
@@ -436,7 +501,7 @@
             card.innerHTML = `
                 <div class="aspect-square bg-gray-700 flex items-center justify-center">
                     <div class="text-center">
-                        <div class="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500 mx-auto"></div>
+                        <div class="spinner mx-auto"></div>
                         <p class="mt-4 text-gray-400">生成中...</p>
                     </div>
                 </div>
@@ -454,21 +519,49 @@
             if (error) {
                 card.innerHTML = `
                     <div class="aspect-square bg-red-900/20 flex items-center justify-center">
-                        <p class="text-red-400">❌ ${error}</p>
+                        <p class="text-red-400 px-4 text-center">❌ ${escapeHtml(error)}</p>
                     </div>
                 `;
                 return;
             }
 
             card.innerHTML = `
-                <img src="${url}" alt="${prompt}" class="w-full aspect-square object-cover">
+                <img src="${escapeHtml(url)}" alt="${escapeHtml(prompt)}" class="w-full aspect-square object-cover" loading="lazy">
                 <div class="p-3">
-                    <p class="text-sm text-gray-400 line-clamp-2">${escapeHtml(prompt)}</p>
-                    <a href="${url}" download class="mt-2 block text-center bg-blue-600 hover:bg-blue-700 rounded px-3 py-1 text-sm transition">
-                        下载
+                    <p class="text-sm text-gray-400 line-clamp-2 mb-2">${escapeHtml(prompt)}</p>
+                    <a href="${escapeHtml(url)}" download target="_blank" class="block text-center bg-blue-600 hover:bg-blue-700 rounded px-3 py-1 text-sm transition">
+                        ⬇️ 下载
                     </a>
                 </div>
             `;
+        }
+
+        // 更新发送按钮状态
+        function updateSendButton(loading) {
+            const btn = document.getElementById('send-btn');
+            if (loading) {
+                btn.disabled = true;
+                btn.textContent = '…';
+                btn.classList.add('opacity-50', 'cursor-not-allowed');
+            } else {
+                btn.disabled = false;
+                btn.textContent = '发送';
+                btn.classList.remove('opacity-50', 'cursor-not-allowed');
+            }
+        }
+
+        // 更新生成按钮状态
+        function updateGenButton(loading) {
+            const btn = document.getElementById('gen-btn');
+            if (loading) {
+                btn.disabled = true;
+                btn.innerHTML = '<div class="spinner mx-auto" style="width:20px;height:20px;border-width:2px"></div>';
+                btn.classList.add('opacity-50', 'cursor-not-allowed');
+            } else {
+                btn.disabled = false;
+                btn.innerHTML = '🎨 生成图片';
+                btn.classList.remove('opacity-50', 'cursor-not-allowed');
+            }
         }
 
         // 清空聊天
@@ -486,8 +579,10 @@
 
         // 清空图片
         function clearImages() {
-            document.getElementById('generated-images').innerHTML = '';
-            document.getElementById('image-empty').classList.remove('hidden');
+            if (confirm('确定要清空所有图片吗？')) {
+                document.getElementById('generated-images').innerHTML = '';
+                document.getElementById('image-empty').classList.remove('hidden');
+            }
         }
 
         // 新建对话
@@ -512,7 +607,14 @@
 
         // 初始化
         window.onload = () => {
+            console.log('WebUI loaded successfully');
             switchMode('chat');
+        };
+
+        // 错误处理
+        window.onerror = function(msg, url, lineNo, columnNo, error) {
+            console.error('Global error:', { msg, url, lineNo, columnNo, error });
+            return false;
         };
     </script>
 </body>
