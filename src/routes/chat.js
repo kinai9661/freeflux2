@@ -112,120 +112,67 @@ router.post('/completions', async (req, res) => {
   }
 });
 
-// Image generation handler
+// Image generation handler - Simplified minimal approach
 async function handleImageGeneration(req, res) {
   const { model, messages } = req.body;
   const prompt = messages[messages.length - 1].content;
 
-  console.log('Image generation request:', { model, prompt });
+  console.log('[Image Gen] Request:', { model, prompt });
 
   try {
-    // Generate session ID for image request
-    const sessionId = generateRandomId(16);
-    
-    // Construct payload matching Typli's expected format
+    // Try the simplest possible payload first
     const payload = {
-      slug: "ai-image-generator",
-      modelId: model || CONFIG.DEFAULT_IMAGE_MODEL,
-      id: sessionId,
       prompt: prompt,
-      trigger: "submit-prompt"
+      modelId: model || CONFIG.DEFAULT_IMAGE_MODEL
     };
 
-    console.log('Sending payload to Typli:', JSON.stringify(payload));
+    console.log('[Image Gen] Payload:', JSON.stringify(payload));
 
     const response = await fetch(CONFIG.UPSTREAM_IMAGE_URL, {
       method: "POST",
       headers: {
         ...CONFIG.BASE_HEADERS,
-        "referer": CONFIG.REFERER_IMAGE_URL
+        "referer": CONFIG.REFERER_IMAGE_URL,
+        "content-type": "application/json"
       },
       body: JSON.stringify(payload)
     });
 
-    console.log('Typli response status:', response.status);
+    console.log('[Image Gen] Response status:', response.status);
+    console.log('[Image Gen] Response headers:', Object.fromEntries(response.headers.entries()));
 
     if (!response.ok) {
       const errorText = await response.text();
-      console.error('Typli error response:', errorText);
-      throw new Error(`Image generation failed: ${response.status} - ${errorText}`);
+      console.error('[Image Gen] Error response:', errorText);
+      throw new Error(`HTTP ${response.status}: ${errorText}`);
     }
 
-    // Check response content type
+    // Try to parse response
     const contentType = response.headers.get('content-type') || '';
-    console.log('Response content-type:', contentType);
+    let result;
 
-    let imageUrl = null;
-
-    if (contentType.includes('text/event-stream')) {
-      // Handle SSE response
-      const reader = response.body.getReader();
-      const decoder = new TextDecoder();
-      let buffer = '';
-
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-
-        buffer += decoder.decode(value, { stream: true });
-        const lines = buffer.split('\n');
-        buffer = lines.pop() || '';
-
-        for (const line of lines) {
-          if (line.startsWith('data: ')) {
-            const dataStr = line.slice(6).trim();
-            if (dataStr === '[DONE]') continue;
-
-            try {
-              const data = JSON.parse(dataStr);
-              console.log('SSE data:', data);
-              
-              // Extract image URL from various possible response formats
-              if (data.url) {
-                imageUrl = data.url;
-              } else if (data.image_url) {
-                imageUrl = data.image_url;
-              } else if (data.images && data.images[0]) {
-                imageUrl = data.images[0].url || data.images[0];
-              } else if (data.output && data.output.url) {
-                imageUrl = data.output.url;
-              } else if (data.type === 'image-url' && data.content) {
-                imageUrl = data.content;
-              }
-
-              if (imageUrl) break;
-            } catch (e) {
-              console.warn('Failed to parse SSE line:', e);
-            }
-          }
-        }
-
-        if (imageUrl) break;
-      }
+    if (contentType.includes('application/json')) {
+      result = await response.json();
+      console.log('[Image Gen] JSON response:', result);
+    } else if (contentType.includes('text/event-stream')) {
+      // Handle SSE
+      console.log('[Image Gen] SSE response detected');
+      result = await parseSSEResponse(response);
     } else {
-      // Handle JSON response
-      const result = await response.json();
-      console.log('JSON response:', result);
-      
-      // Extract URL from various possible formats
-      if (result.url) {
-        imageUrl = result.url;
-      } else if (result.image_url) {
-        imageUrl = result.image_url;
-      } else if (result.images && result.images[0]) {
-        imageUrl = result.images[0].url || result.images[0];
-      } else if (result.output && result.output.url) {
-        imageUrl = result.output.url;
-      } else if (result.data && result.data.url) {
-        imageUrl = result.data.url;
-      }
+      const text = await response.text();
+      console.log('[Image Gen] Text response:', text);
+      throw new Error('Unexpected response format: ' + contentType);
     }
 
+    // Extract image URL
+    const imageUrl = extractImageUrl(result);
+    
     if (!imageUrl) {
-      throw new Error('No image URL found in response');
+      console.error('[Image Gen] No URL found in:', result);
+      throw new Error('No image URL in response');
     }
 
-    console.log('Extracted image URL:', imageUrl);
+    console.log('[Image Gen] Success! URL:', imageUrl);
 
     // Return as SSE stream
     res.setHeader('Content-Type', 'text/event-stream');
@@ -241,20 +188,71 @@ async function handleImageGeneration(req, res) {
     res.end();
 
   } catch (error) {
-    console.error('Image generation error:', error);
+    console.error('[Image Gen] Error:', error);
     
     if (!res.headersSent) {
       res.status(500).json({
         error: { 
           message: error.message, 
-          type: 'image_generation_error',
-          details: error.stack
+          type: 'image_generation_error'
         }
       });
     } else {
       res.end();
     }
   }
+}
+
+// Helper: Parse SSE response
+async function parseSSEResponse(response) {
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = '';
+  let lastData = null;
+
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+
+    buffer += decoder.decode(value, { stream: true });
+    const lines = buffer.split('\n');
+    buffer = lines.pop() || '';
+
+    for (const line of lines) {
+      if (line.startsWith('data: ')) {
+        const dataStr = line.slice(6).trim();
+        if (dataStr === '[DONE]') continue;
+
+        try {
+          lastData = JSON.parse(dataStr);
+          console.log('[SSE] Parsed:', lastData);
+        } catch (e) {
+          console.warn('[SSE] Parse error:', e);
+        }
+      }
+    }
+  }
+
+  return lastData;
+}
+
+// Helper: Extract image URL from various response formats
+function extractImageUrl(data) {
+  if (!data) return null;
+  
+  // Try different possible fields
+  if (typeof data === 'string') return data.match(/https?:\/\/[^\s]+/)?.[0];
+  if (data.url) return data.url;
+  if (data.image_url) return data.image_url;
+  if (data.imageUrl) return data.imageUrl;
+  if (data.images && data.images[0]) {
+    return typeof data.images[0] === 'string' ? data.images[0] : data.images[0].url;
+  }
+  if (data.output && data.output.url) return data.output.url;
+  if (data.data && data.data.url) return data.data.url;
+  if (data.result && data.result.url) return data.result.url;
+  
+  return null;
 }
 
 export default router;
