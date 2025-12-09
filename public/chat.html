@@ -438,7 +438,7 @@
             }
         }
 
-        // 生成图片
+        // 生成图片（修复版）
         async function generateImage() {
             const prompt = document.getElementById('image-prompt').value.trim();
             if (!prompt || isGenerating) return;
@@ -462,7 +462,8 @@
                         },
                         body: JSON.stringify({
                             model: model,
-                            messages: [{role: 'user', content: prompt}]
+                            messages: [{role: 'user', content: prompt}],
+                            stream: false  // 强制非流式
                         })
                     });
 
@@ -470,15 +471,31 @@
                         throw new Error(`HTTP ${response.status}`);
                     }
 
-                    const data = await response.json();
-                    const content = data.choices?.[0]?.message?.content || '';
+                    // 检查响应类型
+                    const contentType = response.headers.get('content-type') || '';
+                    let content = '';
+
+                    if (contentType.includes('text/event-stream')) {
+                        // 处理流式响应
+                        content = await handleImageStreamResponse(response);
+                    } else {
+                        // 处理 JSON 响应
+                        const data = await response.json();
+                        content = data.choices?.[0]?.message?.content || '';
+                    }
                     
                     // 提取图片 URL
-                    const urlMatch = content.match(/!\[.*?\]\((https?:\/\/.*?)\)/);
+                    const urlMatch = content.match(/!\[.*?\]\((https?:\/\/[^\)]+)\)/);
                     if (urlMatch) {
                         updateImageCard(cardId, urlMatch[1], prompt);
                     } else {
-                        updateImageCard(cardId, null, prompt, '无法提取图片 URL');
+                        // 尝试直接提取 URL（某些响应可能只返回 URL）
+                        const directUrl = content.match(/https?:\/\/[^\s]+/);
+                        if (directUrl) {
+                            updateImageCard(cardId, directUrl[0], prompt);
+                        } else {
+                            updateImageCard(cardId, null, prompt, '无法提取图片 URL');
+                        }
                     }
                 } catch (error) {
                     console.error('Image generation error:', error);
@@ -488,6 +505,43 @@
 
             isGenerating = false;
             updateGenButton(false);
+        }
+
+        // 处理图片流式响应
+        async function handleImageStreamResponse(response) {
+            const reader = response.body.getReader();
+            const decoder = new TextDecoder();
+            let fullText = '';
+
+            try {
+                while (true) {
+                    const {done, value} = await reader.read();
+                    if (done) break;
+
+                    const chunk = decoder.decode(value, {stream: true});
+                    const lines = chunk.split('\n');
+
+                    for (const line of lines) {
+                        if (line.startsWith('data: ')) {
+                            const data = line.slice(6).trim();
+                            if (data === '[DONE]') continue;
+                            
+                            try {
+                                const parsed = JSON.parse(data);
+                                const content = parsed.choices?.[0]?.delta?.content || 
+                                              parsed.choices?.[0]?.message?.content || '';
+                                fullText += content;
+                            } catch (e) {
+                                console.warn('Parse chunk error:', e, 'Data:', data);
+                            }
+                        }
+                    }
+                }
+            } catch (e) {
+                console.error('Stream error:', e);
+            }
+
+            return fullText;
         }
 
         // 添加图片占位卡片
@@ -518,22 +572,39 @@
 
             if (error) {
                 card.innerHTML = `
-                    <div class="aspect-square bg-red-900/20 flex items-center justify-center">
-                        <p class="text-red-400 px-4 text-center">❌ ${escapeHtml(error)}</p>
+                    <div class="aspect-square bg-red-900/20 flex items-center justify-center p-4">
+                        <div class="text-center">
+                            <p class="text-red-400 mb-2">❌ 生成失败</p>
+                            <p class="text-red-300 text-sm">${escapeHtml(error)}</p>
+                        </div>
                     </div>
                 `;
                 return;
             }
 
             card.innerHTML = `
-                <img src="${escapeHtml(url)}" alt="${escapeHtml(prompt)}" class="w-full aspect-square object-cover" loading="lazy">
+                <img src="${escapeHtml(url)}" alt="${escapeHtml(prompt)}" class="w-full aspect-square object-cover" loading="lazy" onerror="this.parentElement.innerHTML='<div class=\'aspect-square bg-red-900/20 flex items-center justify-center\'><p class=\'text-red-400\'>图片加载失败</p></div>'">
                 <div class="p-3">
                     <p class="text-sm text-gray-400 line-clamp-2 mb-2">${escapeHtml(prompt)}</p>
-                    <a href="${escapeHtml(url)}" download target="_blank" class="block text-center bg-blue-600 hover:bg-blue-700 rounded px-3 py-1 text-sm transition">
-                        ⬇️ 下载
-                    </a>
+                    <div class="flex gap-2">
+                        <a href="${escapeHtml(url)}" download target="_blank" class="flex-1 text-center bg-blue-600 hover:bg-blue-700 rounded px-3 py-1 text-sm transition">
+                            ⬇️ 下载
+                        </a>
+                        <button onclick="copyImageUrl('${escapeHtml(url)}')" class="flex-1 bg-gray-700 hover:bg-gray-600 rounded px-3 py-1 text-sm transition">
+                            📋 复制链接
+                        </button>
+                    </div>
                 </div>
             `;
+        }
+
+        // 复制图片链接
+        function copyImageUrl(url) {
+            navigator.clipboard.writeText(url).then(() => {
+                alert('✅ 图片链接已复制！');
+            }).catch(err => {
+                console.error('复制失败:', err);
+            });
         }
 
         // 更新发送按钮状态
