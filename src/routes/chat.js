@@ -117,33 +117,123 @@ async function handleImageGeneration(req, res) {
   const { model, messages } = req.body;
   const prompt = messages[messages.length - 1].content;
 
+  console.log('Image generation request:', { model, prompt });
+
   try {
+    // Generate session ID for image request
+    const sessionId = generateRandomId(16);
+    
+    // Construct payload matching Typli's expected format
+    const payload = {
+      slug: "ai-image-generator",
+      modelId: model || CONFIG.DEFAULT_IMAGE_MODEL,
+      id: sessionId,
+      prompt: prompt,
+      trigger: "submit-prompt"
+    };
+
+    console.log('Sending payload to Typli:', JSON.stringify(payload));
+
     const response = await fetch(CONFIG.UPSTREAM_IMAGE_URL, {
       method: "POST",
       headers: {
         ...CONFIG.BASE_HEADERS,
         "referer": CONFIG.REFERER_IMAGE_URL
       },
-      body: JSON.stringify({ 
-        prompt, 
-        model: model || CONFIG.DEFAULT_IMAGE_MODEL 
-      })
+      body: JSON.stringify(payload)
     });
 
+    console.log('Typli response status:', response.status);
+
     if (!response.ok) {
-      throw new Error(`Image generation failed: ${response.status}`);
+      const errorText = await response.text();
+      console.error('Typli error response:', errorText);
+      throw new Error(`Image generation failed: ${response.status} - ${errorText}`);
     }
 
-    const result = await response.json();
-    
-    if (!result.url) {
-      throw new Error('No image URL returned');
+    // Check response content type
+    const contentType = response.headers.get('content-type') || '';
+    console.log('Response content-type:', contentType);
+
+    let imageUrl = null;
+
+    if (contentType.includes('text/event-stream')) {
+      // Handle SSE response
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = '';
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split('\n');
+        buffer = lines.pop() || '';
+
+        for (const line of lines) {
+          if (line.startsWith('data: ')) {
+            const dataStr = line.slice(6).trim();
+            if (dataStr === '[DONE]') continue;
+
+            try {
+              const data = JSON.parse(dataStr);
+              console.log('SSE data:', data);
+              
+              // Extract image URL from various possible response formats
+              if (data.url) {
+                imageUrl = data.url;
+              } else if (data.image_url) {
+                imageUrl = data.image_url;
+              } else if (data.images && data.images[0]) {
+                imageUrl = data.images[0].url || data.images[0];
+              } else if (data.output && data.output.url) {
+                imageUrl = data.output.url;
+              } else if (data.type === 'image-url' && data.content) {
+                imageUrl = data.content;
+              }
+
+              if (imageUrl) break;
+            } catch (e) {
+              console.warn('Failed to parse SSE line:', e);
+            }
+          }
+        }
+
+        if (imageUrl) break;
+      }
+    } else {
+      // Handle JSON response
+      const result = await response.json();
+      console.log('JSON response:', result);
+      
+      // Extract URL from various possible formats
+      if (result.url) {
+        imageUrl = result.url;
+      } else if (result.image_url) {
+        imageUrl = result.image_url;
+      } else if (result.images && result.images[0]) {
+        imageUrl = result.images[0].url || result.images[0];
+      } else if (result.output && result.output.url) {
+        imageUrl = result.output.url;
+      } else if (result.data && result.data.url) {
+        imageUrl = result.data.url;
+      }
     }
+
+    if (!imageUrl) {
+      throw new Error('No image URL found in response');
+    }
+
+    console.log('Extracted image URL:', imageUrl);
 
     // Return as SSE stream
     res.setHeader('Content-Type', 'text/event-stream');
+    res.setHeader('Cache-Control', 'no-cache');
+    res.setHeader('Connection', 'keep-alive');
+    
     const requestId = generateRandomId(12);
-    const markdown = `![${prompt}](${result.url})`;
+    const markdown = `![${prompt}](${imageUrl})`;
     
     const chunk = createChatCompletionChunk(requestId, model, markdown, "stop");
     res.write(`data: ${JSON.stringify(chunk)}\n\n`);
@@ -152,9 +242,18 @@ async function handleImageGeneration(req, res) {
 
   } catch (error) {
     console.error('Image generation error:', error);
-    res.status(500).json({
-      error: { message: error.message, type: 'api_error' }
-    });
+    
+    if (!res.headersSent) {
+      res.status(500).json({
+        error: { 
+          message: error.message, 
+          type: 'image_generation_error',
+          details: error.stack
+        }
+      });
+    } else {
+      res.end();
+    }
   }
 }
 
