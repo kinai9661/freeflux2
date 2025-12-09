@@ -176,6 +176,19 @@
         .lightbox-nav.next {
             right: 20px;
         }
+        
+        /* 冷却时间提示 */
+        .cooldown-badge {
+            position: absolute;
+            top: -25px;
+            right: 0;
+            background: rgba(255, 84, 89, 0.9);
+            color: white;
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-size: 12px;
+            white-space: nowrap;
+        }
     </style>
 </head>
 <body class="bg-gray-900 text-white">
@@ -282,8 +295,9 @@
                             placeholder="输入消息... (Shift+Enter 换行)"
                             onkeydown="handleChatKeydown(event)"></textarea>
                         <button onclick="sendMessage()" id="send-btn"
-                            class="bg-blue-600 hover:bg-blue-700 rounded-lg px-6 py-3 transition font-semibold">
+                            class="bg-blue-600 hover:bg-blue-700 rounded-lg px-6 py-3 transition font-semibold relative">
                             发送
+                            <span class="cooldown-badge hidden" id="send-cooldown"></span>
                         </button>
                     </div>
                 </div>
@@ -330,8 +344,9 @@
                             placeholder="描述你想要的图片... (支持中英文)"></textarea>
                         <div class="flex gap-2">
                             <button onclick="generateImage()" id="gen-btn"
-                                class="flex-1 bg-purple-600 hover:bg-purple-700 rounded-lg px-6 py-3 transition font-semibold">
+                                class="flex-1 bg-purple-600 hover:bg-purple-700 rounded-lg px-6 py-3 transition font-semibold relative">
                                 🎨 生成图片
+                                <span class="cooldown-badge hidden" id="gen-cooldown"></span>
                             </button>
                             <button onclick="randomPrompt()"
                                 class="bg-gray-700 hover:bg-gray-600 rounded-lg px-4 py-3 transition">
@@ -506,15 +521,22 @@
     </div>
 
     <script>
+        // 常量定义
         const API_BASE = window.location.origin;
+        const REQUEST_COOLDOWN_MS = 5000; // 5秒冷却
+
+        // 状态变量
         let currentMode = 'chat';
         let messages = [];
         let isGenerating = false;
         let imageHistory = [];
         let currentLightboxIndex = 0;
         let lightboxImages = [];
+        let lastRequestTime = 0;
+        let lastChatTime = 0;
+        let lastGenTime = 0;
 
-        // Lightbox 功能
+        // ==================== Lightbox 功能 ====================
         function openLightbox(url, prompt, model, index = 0, images = []) {
             const lightbox = document.getElementById('lightbox');
             const img = document.getElementById('lightbox-img');
@@ -528,7 +550,6 @@
             lightbox.classList.add('active');
             document.body.style.overflow = 'hidden';
             
-            // 设置导航
             lightboxImages = images;
             currentLightboxIndex = index;
             updateLightboxNav();
@@ -607,7 +628,7 @@
             if (e.key === 'z' || e.key === 'Z') zoomImage();
         });
 
-        // 加载历史记录
+        // ==================== 历史记录管理 ====================
         function loadHistory() {
             try {
                 const saved = localStorage.getItem('image_history');
@@ -620,7 +641,6 @@
             }
         }
 
-        // 保存历史记录
         function saveHistory() {
             try {
                 localStorage.setItem('image_history', JSON.stringify(imageHistory));
@@ -630,7 +650,6 @@
             }
         }
 
-        // 更新统计信息
         function updateHistoryStats() {
             document.getElementById('total-images').textContent = imageHistory.length;
             const size = JSON.stringify(imageHistory).length;
@@ -641,7 +660,7 @@
             }
         }
 
-        // Marked 配置
+        // ==================== Marked 配置 ====================
         if (typeof marked !== 'undefined') {
             marked.setOptions({
                 highlight: function(code, lang) {
@@ -657,7 +676,7 @@
             });
         }
 
-        // 模式切换
+        // ==================== 模式切换 ====================
         function switchMode(mode) {
             currentMode = mode;
             
@@ -689,7 +708,7 @@
             }
         }
 
-        // 渲染历史记录
+        // ==================== 历史渲染 ====================
         function renderHistory() {
             const grid = document.getElementById('history-grid');
             const empty = document.getElementById('history-empty');
@@ -729,7 +748,6 @@
             `).join('');
         }
 
-        // 删除历史记录
         function deleteHistoryItem(id) {
             if (confirm('确定要删除这条记录吗？')) {
                 imageHistory = imageHistory.filter(item => item.id !== id);
@@ -738,7 +756,6 @@
             }
         }
 
-        // 清空历史
         function clearHistory() {
             if (confirm('确定要清空所有历史记录吗？')) {
                 imageHistory = [];
@@ -747,7 +764,6 @@
             }
         }
 
-        // 导出历史
         function exportHistory() {
             const dataStr = JSON.stringify(imageHistory, null, 2);
             const dataBlob = new Blob([dataStr], {type: 'application/json'});
@@ -759,13 +775,12 @@
             URL.revokeObjectURL(url);
         }
 
-        // 设置提示词
+        // ==================== 提示词相关 ====================
         function setPrompt(text) {
             document.getElementById('image-prompt').value = text;
             switchMode('image');
         }
 
-        // 随机提示词
         function randomPrompt() {
             const prompts = [
                 '一只戴着太空头盔的猫咪航员',
@@ -781,8 +796,26 @@
             document.getElementById('image-prompt').value = random;
         }
 
-        // 发送聊天消息（省略，与之前相同）
+        // ==================== 聊天功能 ====================
         async function sendMessage() {
+            const now = Date.now();
+            const timeSinceLastRequest = now - lastRequestTime;
+            
+            if (timeSinceLastRequest < REQUEST_COOLDOWN_MS) {
+                const remaining = Math.ceil((REQUEST_COOLDOWN_MS - timeSinceLastRequest) / 1000);
+                const cooldownEl = document.getElementById('send-cooldown');
+                cooldownEl.textContent = `${remaining}s`;
+                cooldownEl.classList.remove('hidden');
+                setTimeout(() => {
+                    if (now - lastChatTime < REQUEST_COOLDOWN_MS) {
+                        cooldownEl.classList.remove('hidden');
+                    } else {
+                        cooldownEl.classList.add('hidden');
+                    }
+                }, 1000);
+                return;
+            }
+            
             const input = document.getElementById('chat-input');
             const content = input.value.trim();
             if (!content || isGenerating) return;
@@ -797,6 +830,8 @@
 
             const assistantMsgId = addMessage('assistant', '');
             isGenerating = true;
+            lastRequestTime = now;
+            lastChatTime = now;
             updateSendButton(true);
 
             try {
@@ -834,7 +869,6 @@
             }
         }
 
-        // 处理流式响应
         async function handleStreamResponse(response, messageId) {
             const reader = response.body.getReader();
             const decoder = new TextDecoder();
@@ -868,7 +902,6 @@
             }
         }
 
-        // 添加消息到界面
         function addMessage(role, content) {
             const id = Date.now();
             messages.push({id, role, content});
@@ -876,7 +909,6 @@
             return id;
         }
 
-        // 渲染所有消息
         function renderMessages() {
             const messagesDiv = document.getElementById('messages');
             messagesDiv.innerHTML = '';
@@ -908,7 +940,6 @@
             messagesDiv.scrollTop = messagesDiv.scrollHeight;
         }
 
-        // 更新消息内容
         function updateMessage(id, content) {
             const index = messages.findIndex(m => m.id === id);
             if (index !== -1) {
@@ -925,8 +956,26 @@
             }
         }
 
-        // 生成图片
+        // ==================== 图片生成功能 ====================
         async function generateImage() {
+            const now = Date.now();
+            const timeSinceLastRequest = now - lastRequestTime;
+            
+            if (timeSinceLastRequest < REQUEST_COOLDOWN_MS) {
+                const remaining = Math.ceil((REQUEST_COOLDOWN_MS - timeSinceLastRequest) / 1000);
+                const cooldownEl = document.getElementById('gen-cooldown');
+                cooldownEl.textContent = `${remaining}s`;
+                cooldownEl.classList.remove('hidden');
+                setTimeout(() => {
+                    if (now - lastGenTime < REQUEST_COOLDOWN_MS) {
+                        cooldownEl.classList.remove('hidden');
+                    } else {
+                        cooldownEl.classList.add('hidden');
+                    }
+                }, 1000);
+                return;
+            }
+
             let prompt = document.getElementById('image-prompt').value.trim();
             if (!prompt || isGenerating) return;
 
@@ -958,9 +1007,9 @@
             
             document.getElementById('image-empty').classList.add('hidden');
             isGenerating = true;
+            lastRequestTime = now;
+            lastGenTime = now;
             updateGenButton(true);
-
-            const generatedImages = [];
 
             for (let i = 0; i < numImages; i++) {
                 const cardId = addImagePlaceholder();
@@ -999,13 +1048,6 @@
                         const originalPrompt = document.getElementById('image-prompt').value;
                         updateImageCard(cardId, imageUrl, originalPrompt);
                         
-                        generatedImages.push({
-                            url: imageUrl,
-                            prompt: originalPrompt,
-                            model: model
-                        });
-                        
-                        // 保存到历史
                         if (saveToHistory) {
                             imageHistory.push({
                                 id: `img_${Date.now()}_${i}`,
@@ -1036,7 +1078,6 @@
             updateGenButton(false);
         }
 
-        // 处理图片流式响应
         async function handleImageStreamResponse(response) {
             const reader = response.body.getReader();
             const decoder = new TextDecoder();
@@ -1071,7 +1112,6 @@
             return fullText;
         }
 
-        // 添加图片占位卡片
         function addImagePlaceholder() {
             const id = Date.now() + Math.random();
             const container = document.getElementById('generated-images');
@@ -1092,7 +1132,6 @@
             return id;
         }
 
-        // 更新图片卡片
         function updateImageCard(id, url, prompt, error = null) {
             const card = document.getElementById(`img-card-${id}`);
             if (!card) return;
@@ -1133,29 +1172,6 @@
             `;
         }
 
-        // 复制图片链接
-        function copyImageUrl(url) {
-            navigator.clipboard.writeText(url).then(() => {
-                alert('✅ 图片链接已复制！');
-            }).catch(err => {
-                console.error('复制失败:', err);
-            });
-        }
-
-        // 分享图片
-        function shareImage(url, prompt) {
-            if (navigator.share) {
-                navigator.share({
-                    title: 'AI 生成图片',
-                    text: prompt,
-                    url: url
-                }).catch(err => console.log('Share failed:', err));
-            } else {
-                copyImageUrl(url);
-            }
-        }
-
-        // 下载图片
         function downloadImage(url, filename) {
             const link = document.createElement('a');
             link.href = url;
@@ -1164,7 +1180,7 @@
             link.click();
         }
 
-        // 更新发送按钮状态
+        // ==================== 按钮状态更新 ====================
         function updateSendButton(loading) {
             const btn = document.getElementById('send-btn');
             if (loading) {
@@ -1178,7 +1194,6 @@
             }
         }
 
-        // 更新生成按钮状态
         function updateGenButton(loading) {
             const btn = document.getElementById('gen-btn');
             if (loading) {
@@ -1192,7 +1207,7 @@
             }
         }
 
-        // 清空聊天
+        // ==================== 工具函数 ====================
         function clearChat() {
             if (confirm('确定要清空所有对话吗？')) {
                 messages = [];
@@ -1205,7 +1220,6 @@
             }
         }
 
-        // 清空图片
         function clearImages() {
             if (confirm('确定要清空当前所有图片吗？')) {
                 document.getElementById('generated-images').innerHTML = '';
@@ -1213,12 +1227,10 @@
             }
         }
 
-        // 新建对话
         function newChat() {
             clearChat();
         }
 
-        // 键盘事件处理
         function handleChatKeydown(e) {
             if (e.key === 'Enter' && !e.shiftKey) {
                 e.preventDefault();
@@ -1226,21 +1238,19 @@
             }
         }
 
-        // HTML 转义
         function escapeHtml(text) {
             const div = document.createElement('div');
             div.textContent = text;
             return div.innerHTML;
         }
 
-        // 初始化
+        // ==================== 初始化 ====================
         window.onload = () => {
             console.log('WebUI loaded successfully');
             loadHistory();
             switchMode('chat');
         };
 
-        // 错误处理
         window.onerror = function(msg, url, lineNo, columnNo, error) {
             console.error('Global error:', { msg, url, lineNo, columnNo, error });
             return false;
