@@ -44,9 +44,13 @@ app.use('/v1/chat', authMiddleware, chatRoutes);
 app.use('/v1/models', authMiddleware, modelRoutes);
 app.use('/v1/providers', authMiddleware, providerRoutes);
 
-// WebUI home
+// WebUI pages
 app.get('/', (req, res) => {
   res.sendFile(join(__dirname, 'public', 'index.html'));
+});
+
+app.get('/chat', (req, res) => {
+  res.sendFile(join(__dirname, 'public', 'chat.html'));
 });
 
 // 404 handler
