@@ -1,0 +1,519 @@
+<!DOCTYPE html>
+<html lang="zh-CN" class="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Typli Chat & Image Generator</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    colors: {
+                        primary: '#3b82f6',
+                        secondary: '#8b5cf6'
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        .message-content pre {
+            background: #1f2937;
+            padding: 1rem;
+            border-radius: 0.5rem;
+            overflow-x: auto;
+            margin: 0.5rem 0;
+        }
+        .message-content code {
+            background: #374151;
+            padding: 0.2rem 0.4rem;
+            border-radius: 0.25rem;
+        }
+        .fade-in {
+            animation: fadeIn 0.3s ease-in;
+        }
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+    </style>
+</head>
+<body class="bg-gray-900 text-white">
+    <!-- 顶部导航 -->
+    <nav class="bg-gray-800 border-b border-gray-700 sticky top-0 z-50">
+        <div class="max-w-7xl mx-auto px-4 py-3 flex items-center justify-between">
+            <div class="flex items-center gap-4">
+                <h1 class="text-xl font-bold bg-gradient-to-r from-blue-500 to-purple-500 bg-clip-text text-transparent">
+                    🚀 Typli AI
+                </h1>
+                <div class="flex gap-2">
+                    <button onclick="switchMode('chat')" id="btn-chat" 
+                        class="px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-700 transition">
+                        💬 聊天
+                    </button>
+                    <button onclick="switchMode('image')" id="btn-image"
+                        class="px-4 py-2 rounded-lg bg-gray-700 hover:bg-gray-600 transition">
+                        🎨 文生图
+                    </button>
+                </div>
+            </div>
+            <div class="flex gap-2">
+                <a href="/" class="px-3 py-2 rounded hover:bg-gray-700 transition text-sm">
+                    📊 监控
+                </a>
+                <a href="https://github.com/kinai9661/freeflux2" target="_blank" 
+                   class="px-3 py-2 rounded hover:bg-gray-700 transition text-sm">
+                    <svg class="w-5 h-5 inline" fill="currentColor" viewBox="0 0 24 24">
+                        <path d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576 4.765-1.589 8.199-6.086 8.199-11.386 0-6.627-5.373-12-12-12z"/>
+                    </svg>
+                </a>
+            </div>
+        </div>
+    </nav>
+
+    <div class="flex h-[calc(100vh-64px)]">
+        <!-- 左侧边栏 -->
+        <aside class="w-64 bg-gray-800 border-r border-gray-700 overflow-y-auto hidden md:block">
+            <div class="p-4">
+                <button onclick="newChat()" 
+                    class="w-full bg-blue-600 hover:bg-blue-700 rounded-lg px-4 py-2 mb-4 transition">
+                    ➕ 新建对话
+                </button>
+                <div id="history-list" class="space-y-2">
+                    <!-- 历史记录列表 -->
+                </div>
+            </div>
+        </aside>
+
+        <!-- 主内容区 -->
+        <main class="flex-1 flex flex-col">
+            <!-- 聊天模式 -->
+            <div id="chat-mode" class="flex-1 flex flex-col">
+                <div id="messages" class="flex-1 overflow-y-auto p-4 space-y-4">
+                    <!-- 欢迎消息 -->
+                    <div class="text-center py-20">
+                        <h2 class="text-3xl font-bold mb-4">👋 你好！</h2>
+                        <p class="text-gray-400">选择一个模型开始对话</p>
+                    </div>
+                </div>
+                
+                <!-- 输入框 -->
+                <div class="border-t border-gray-700 p-4 bg-gray-800">
+                    <div class="max-w-4xl mx-auto flex gap-2">
+                        <textarea id="chat-input" rows="1" 
+                            class="flex-1 bg-gray-700 rounded-lg px-4 py-3 resize-none focus:outline-none focus:ring-2 focus:ring-blue-500"
+                            placeholder="输入消息... (Shift+Enter 换行)"
+                            onkeydown="handleChatKeydown(event)"></textarea>
+                        <button onclick="sendMessage()" 
+                            class="bg-blue-600 hover:bg-blue-700 rounded-lg px-6 py-3 transition font-semibold">
+                            发送
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 文生图模式 -->
+            <div id="image-mode" class="hidden flex-1 flex flex-col">
+                <div class="flex-1 overflow-y-auto p-4">
+                    <div class="max-w-4xl mx-auto">
+                        <!-- 生成的图片展示 -->
+                        <div id="generated-images" class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+                            <!-- 图片卡片 -->
+                        </div>
+                        
+                        <!-- 空状态 -->
+                        <div id="image-empty" class="text-center py-20">
+                            <h2 class="text-3xl font-bold mb-4">🎨 AI 绘画</h2>
+                            <p class="text-gray-400">输入提示词生成图片</p>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- 文生图输入 -->
+                <div class="border-t border-gray-700 p-4 bg-gray-800">
+                    <div class="max-w-4xl mx-auto space-y-3">
+                        <textarea id="image-prompt" rows="2"
+                            class="w-full bg-gray-700 rounded-lg px-4 py-3 resize-none focus:outline-none focus:ring-2 focus:ring-purple-500"
+                            placeholder="描述你想要的图片..."></textarea>
+                        <div class="flex gap-2">
+                            <button onclick="generateImage()" 
+                                class="flex-1 bg-purple-600 hover:bg-purple-700 rounded-lg px-6 py-3 transition font-semibold">
+                                🎨 生成图片
+                            </button>
+                            <button onclick="clearImages()"
+                                class="bg-gray-700 hover:bg-gray-600 rounded-lg px-6 py-3 transition">
+                                清空
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </main>
+
+        <!-- 右侧设置面板 -->
+        <aside class="w-80 bg-gray-800 border-l border-gray-700 overflow-y-auto hidden lg:block">
+            <div class="p-4">
+                <!-- 聊天设置 -->
+                <div id="chat-settings" class="space-y-4">
+                    <h3 class="font-bold text-lg mb-3">⚙️ 聊天设置</h3>
+                    
+                    <div>
+                        <label class="block text-sm text-gray-400 mb-2">模型</label>
+                        <select id="chat-model" class="w-full bg-gray-700 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500">
+                            <optgroup label="推荐">
+                                <option value="xai/grok-4-fast">Grok-4 Fast ⚡</option>
+                                <option value="openai/gpt-4o">GPT-4o</option>
+                                <option value="anthropic/claude-haiku-4-5">Claude Haiku 4.5</option>
+                            </optgroup>
+                            <optgroup label="其他">
+                                <option value="openai/gpt-5">GPT-5</option>
+                                <option value="google/gemini-2.5-flash">Gemini 2.5 Flash</option>
+                                <option value="deepseek/deepseek-reasoner">DeepSeek Reasoner</option>
+                                <option value="deepseek/deepseek-chat">DeepSeek Chat</option>
+                            </optgroup>
+                        </select>
+                    </div>
+
+                    <div>
+                        <label class="block text-sm text-gray-400 mb-2">Temperature: <span id="temp-value">0.7</span></label>
+                        <input type="range" id="temperature" min="0" max="2" step="0.1" value="0.7"
+                            class="w-full" oninput="document.getElementById('temp-value').textContent = this.value">
+                    </div>
+
+                    <div>
+                        <label class="flex items-center gap-2">
+                            <input type="checkbox" id="stream" checked class="rounded">
+                            <span class="text-sm">流式输出</span>
+                        </label>
+                    </div>
+
+                    <button onclick="clearChat()" 
+                        class="w-full bg-red-600 hover:bg-red-700 rounded-lg px-4 py-2 transition">
+                        🗑️ 清空对话
+                    </button>
+                </div>
+
+                <!-- 文生图设置 -->
+                <div id="image-settings" class="hidden space-y-4">
+                    <h3 class="font-bold text-lg mb-3">🎨 生成设置</h3>
+                    
+                    <div>
+                        <label class="block text-sm text-gray-400 mb-2">图片模型</label>
+                        <select id="image-model" class="w-full bg-gray-700 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-purple-500">
+                            <option value="fal-ai/flux-2-pro">FLUX 2 Pro (最高质量)</option>
+                            <option value="fal-ai/flux-2" selected>FLUX 2 (推荐)</option>
+                            <option value="fal-ai/flux-2-dev">FLUX 2 Dev</option>
+                            <option value="fal-ai/nano-banana-pro">Nano Banana Pro</option>
+                            <option value="fal-ai/stable-diffusion-v35-large">Stable Diffusion v3.5</option>
+                        </select>
+                    </div>
+
+                    <div>
+                        <label class="block text-sm text-gray-400 mb-2">生成数量</label>
+                        <select id="num-images" class="w-full bg-gray-700 rounded-lg px-3 py-2">
+                            <option value="1" selected>1 张</option>
+                            <option value="2">2 张</option>
+                            <option value="3">3 张</option>
+                            <option value="4">4 张</option>
+                        </select>
+                    </div>
+                </div>
+            </div>
+        </aside>
+    </div>
+
+    <script>
+        const API_BASE = window.location.origin;
+        let currentMode = 'chat';
+        let messages = [];
+        let isGenerating = false;
+
+        // 模式切换
+        function switchMode(mode) {
+            currentMode = mode;
+            
+            if (mode === 'chat') {
+                document.getElementById('chat-mode').classList.remove('hidden');
+                document.getElementById('image-mode').classList.add('hidden');
+                document.getElementById('chat-settings').classList.remove('hidden');
+                document.getElementById('image-settings').classList.add('hidden');
+                document.getElementById('btn-chat').classList.add('bg-blue-600');
+                document.getElementById('btn-chat').classList.remove('bg-gray-700');
+                document.getElementById('btn-image').classList.remove('bg-blue-600');
+                document.getElementById('btn-image').classList.add('bg-gray-700');
+            } else {
+                document.getElementById('chat-mode').classList.add('hidden');
+                document.getElementById('image-mode').classList.remove('hidden');
+                document.getElementById('chat-settings').classList.add('hidden');
+                document.getElementById('image-settings').classList.remove('hidden');
+                document.getElementById('btn-image').classList.add('bg-blue-600');
+                document.getElementById('btn-image').classList.remove('bg-gray-700');
+                document.getElementById('btn-chat').classList.remove('bg-blue-600');
+                document.getElementById('btn-chat').classList.add('bg-gray-700');
+            }
+        }
+
+        // 发送聊天消息
+        async function sendMessage() {
+            const input = document.getElementById('chat-input');
+            const content = input.value.trim();
+            if (!content || isGenerating) return;
+
+            const model = document.getElementById('chat-model').value;
+            const temperature = parseFloat(document.getElementById('temperature').value);
+            const stream = document.getElementById('stream').checked;
+
+            // 添加用户消息
+            addMessage('user', content);
+            input.value = '';
+            input.style.height = 'auto';
+
+            // 添加助手消息占位
+            const assistantMsgId = addMessage('assistant', '');
+            isGenerating = true;
+
+            try {
+                const response = await fetch(`${API_BASE}/v1/chat/completions`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': 'Bearer 1'
+                    },
+                    body: JSON.stringify({
+                        model: model,
+                        messages: messages.map(m => ({role: m.role, content: m.content})),
+                        temperature: temperature,
+                        stream: stream
+                    })
+                });
+
+                if (stream) {
+                    await handleStreamResponse(response, assistantMsgId);
+                } else {
+                    const data = await response.json();
+                    const content = data.choices[0].message.content;
+                    updateMessage(assistantMsgId, content);
+                }
+            } catch (error) {
+                updateMessage(assistantMsgId, `❌ 错误: ${error.message}`);
+            } finally {
+                isGenerating = false;
+            }
+        }
+
+        // 处理流式响应
+        async function handleStreamResponse(response, messageId) {
+            const reader = response.body.getReader();
+            const decoder = new TextDecoder();
+            let fullText = '';
+
+            while (true) {
+                const {done, value} = await reader.read();
+                if (done) break;
+
+                const chunk = decoder.decode(value);
+                const lines = chunk.split('\n');
+
+                for (const line of lines) {
+                    if (line.startsWith('data: ')) {
+                        const data = line.slice(6);
+                        if (data === '[DONE]') continue;
+                        
+                        try {
+                            const parsed = JSON.parse(data);
+                            const content = parsed.choices[0]?.delta?.content || '';
+                            fullText += content;
+                            updateMessage(messageId, fullText);
+                        } catch (e) {}
+                    }
+                }
+            }
+        }
+
+        // 添加消息到界面
+        function addMessage(role, content) {
+            const id = Date.now();
+            messages.push({id, role, content});
+            
+            const messagesDiv = document.getElementById('messages');
+            messagesDiv.innerHTML = '';
+
+            messages.forEach(msg => {
+                const div = document.createElement('div');
+                div.id = `msg-${msg.id}`;
+                div.className = `fade-in ${msg.role === 'user' ? 'flex justify-end' : ''}`;
+                
+                const bubble = document.createElement('div');
+                bubble.className = `max-w-3xl px-4 py-3 rounded-lg ${
+                    msg.role === 'user' 
+                        ? 'bg-blue-600 text-white' 
+                        : 'bg-gray-800 border border-gray-700'
+                }`;
+                
+                bubble.innerHTML = `
+                    <div class="message-content ${msg.role === 'user' ? '' : 'prose prose-invert max-w-none'}">
+                        ${msg.role === 'user' ? escapeHtml(msg.content) : marked.parse(msg.content || '⏳ 思考中...')}
+                    </div>
+                `;
+                
+                div.appendChild(bubble);
+                messagesDiv.appendChild(div);
+            });
+
+            messagesDiv.scrollTop = messagesDiv.scrollHeight;
+            return id;
+        }
+
+        // 更新消息内容
+        function updateMessage(id, content) {
+            const index = messages.findIndex(m => m.id === id);
+            if (index !== -1) {
+                messages[index].content = content;
+                const msgEl = document.getElementById(`msg-${id}`);
+                if (msgEl) {
+                    const contentEl = msgEl.querySelector('.message-content');
+                    contentEl.innerHTML = marked.parse(content);
+                }
+            }
+        }
+
+        // 生成图片
+        async function generateImage() {
+            const prompt = document.getElementById('image-prompt').value.trim();
+            if (!prompt || isGenerating) return;
+
+            const model = document.getElementById('image-model').value;
+            const numImages = parseInt(document.getElementById('num-images').value);
+            
+            document.getElementById('image-empty').classList.add('hidden');
+            isGenerating = true;
+
+            for (let i = 0; i < numImages; i++) {
+                const cardId = addImagePlaceholder();
+                
+                try {
+                    const response = await fetch(`${API_BASE}/v1/chat/completions`, {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'Authorization': 'Bearer 1'
+                        },
+                        body: JSON.stringify({
+                            model: model,
+                            messages: [{role: 'user', content: prompt}]
+                        })
+                    });
+
+                    const data = await response.json();
+                    const content = data.choices[0].message.content;
+                    
+                    // 提取图片 URL
+                    const urlMatch = content.match(/!\[.*?\]\((https?:\/\/.*?)\)/);
+                    if (urlMatch) {
+                        updateImageCard(cardId, urlMatch[1], prompt);
+                    } else {
+                        updateImageCard(cardId, null, prompt, '生成失败');
+                    }
+                } catch (error) {
+                    updateImageCard(cardId, null, prompt, error.message);
+                }
+            }
+
+            isGenerating = false;
+        }
+
+        // 添加图片占位卡片
+        function addImagePlaceholder() {
+            const id = Date.now() + Math.random();
+            const container = document.getElementById('generated-images');
+            
+            const card = document.createElement('div');
+            card.id = `img-card-${id}`;
+            card.className = 'bg-gray-800 rounded-lg overflow-hidden border border-gray-700 fade-in';
+            card.innerHTML = `
+                <div class="aspect-square bg-gray-700 flex items-center justify-center">
+                    <div class="text-center">
+                        <div class="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500 mx-auto"></div>
+                        <p class="mt-4 text-gray-400">生成中...</p>
+                    </div>
+                </div>
+            `;
+            
+            container.appendChild(card);
+            return id;
+        }
+
+        // 更新图片卡片
+        function updateImageCard(id, url, prompt, error = null) {
+            const card = document.getElementById(`img-card-${id}`);
+            if (!card) return;
+
+            if (error) {
+                card.innerHTML = `
+                    <div class="aspect-square bg-red-900/20 flex items-center justify-center">
+                        <p class="text-red-400">❌ ${error}</p>
+                    </div>
+                `;
+                return;
+            }
+
+            card.innerHTML = `
+                <img src="${url}" alt="${prompt}" class="w-full aspect-square object-cover">
+                <div class="p-3">
+                    <p class="text-sm text-gray-400 line-clamp-2">${escapeHtml(prompt)}</p>
+                    <a href="${url}" download class="mt-2 block text-center bg-blue-600 hover:bg-blue-700 rounded px-3 py-1 text-sm transition">
+                        下载
+                    </a>
+                </div>
+            `;
+        }
+
+        // 清空聊天
+        function clearChat() {
+            if (confirm('确定要清空所有对话吗？')) {
+                messages = [];
+                document.getElementById('messages').innerHTML = `
+                    <div class="text-center py-20">
+                        <h2 class="text-3xl font-bold mb-4">👋 你好！</h2>
+                        <p class="text-gray-400">选择一个模型开始对话</p>
+                    </div>
+                `;
+            }
+        }
+
+        // 清空图片
+        function clearImages() {
+            document.getElementById('generated-images').innerHTML = '';
+            document.getElementById('image-empty').classList.remove('hidden');
+        }
+
+        // 新建对话
+        function newChat() {
+            clearChat();
+        }
+
+        // 键盘事件处理
+        function handleChatKeydown(e) {
+            if (e.key === 'Enter' && !e.shiftKey) {
+                e.preventDefault();
+                sendMessage();
+            }
+        }
+
+        // HTML 转义
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+
+        // 初始化
+        window.onload = () => {
+            switchMode('chat');
+        };
+    </script>
+</body>
+</html>
