@@ -60,6 +60,7 @@
         .gallery-item {
             position: relative;
             overflow: hidden;
+            cursor: pointer;
         }
         .gallery-item:hover .gallery-overlay {
             opacity: 1;
@@ -78,9 +79,141 @@
             justify-content: center;
             gap: 0.5rem;
         }
+        
+        /* Lightbox 样式 */
+        .lightbox {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0, 0, 0, 0.95);
+            z-index: 9999;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            opacity: 0;
+            visibility: hidden;
+            transition: opacity 0.3s, visibility 0.3s;
+        }
+        .lightbox.active {
+            opacity: 1;
+            visibility: visible;
+        }
+        .lightbox-content {
+            position: relative;
+            max-width: 90vw;
+            max-height: 90vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .lightbox-image {
+            max-width: 100%;
+            max-height: 90vh;
+            object-fit: contain;
+            transition: transform 0.3s;
+            cursor: zoom-in;
+        }
+        .lightbox-image.zoomed {
+            cursor: zoom-out;
+            transform: scale(1.5);
+        }
+        .lightbox-controls {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            display: flex;
+            gap: 10px;
+            z-index: 10000;
+        }
+        .lightbox-btn {
+            background: rgba(255, 255, 255, 0.1);
+            border: 1px solid rgba(255, 255, 255, 0.3);
+            color: white;
+            padding: 10px 15px;
+            border-radius: 8px;
+            cursor: pointer;
+            backdrop-filter: blur(10px);
+            transition: all 0.3s;
+        }
+        .lightbox-btn:hover {
+            background: rgba(255, 255, 255, 0.2);
+            transform: scale(1.05);
+        }
+        .lightbox-info {
+            position: absolute;
+            bottom: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(0, 0, 0, 0.8);
+            padding: 15px 25px;
+            border-radius: 10px;
+            max-width: 80%;
+            text-align: center;
+            backdrop-filter: blur(10px);
+        }
+        .lightbox-nav {
+            position: absolute;
+            top: 50%;
+            transform: translateY(-50%);
+            background: rgba(255, 255, 255, 0.1);
+            border: 1px solid rgba(255, 255, 255, 0.3);
+            color: white;
+            padding: 20px 15px;
+            border-radius: 8px;
+            cursor: pointer;
+            backdrop-filter: blur(10px);
+            transition: all 0.3s;
+            z-index: 10001;
+        }
+        .lightbox-nav:hover {
+            background: rgba(255, 255, 255, 0.2);
+        }
+        .lightbox-nav.prev {
+            left: 20px;
+        }
+        .lightbox-nav.next {
+            right: 20px;
+        }
     </style>
 </head>
 <body class="bg-gray-900 text-white">
+    <!-- Lightbox 模态框 -->
+    <div id="lightbox" class="lightbox" onclick="closeLightbox(event)">
+        <div class="lightbox-controls">
+            <button class="lightbox-btn" onclick="zoomImage()" title="放大/缩小">
+                🔍 缩放
+            </button>
+            <button class="lightbox-btn" onclick="downloadCurrentImage()" title="下载">
+                ⬇️ 下载
+            </button>
+            <button class="lightbox-btn" onclick="toggleFullscreen()" title="全屏">
+                ⛶ 全屏
+            </button>
+            <button class="lightbox-btn" onclick="closeLightbox()" title="关闭 (ESC)">
+                ✕ 关闭
+            </button>
+        </div>
+        
+        <button class="lightbox-nav prev" onclick="navigateImage(-1)" id="lightbox-prev" style="display:none;">
+            ‹
+        </button>
+        
+        <div class="lightbox-content" onclick="event.stopPropagation()">
+            <img id="lightbox-img" class="lightbox-image" src="" alt="" onclick="zoomImage()">
+        </div>
+        
+        <button class="lightbox-nav next" onclick="navigateImage(1)" id="lightbox-next" style="display:none;">
+            ›
+        </button>
+        
+        <div class="lightbox-info" id="lightbox-info">
+            <p class="text-sm text-gray-300" id="lightbox-prompt"></p>
+            <p class="text-xs text-gray-500 mt-1" id="lightbox-meta"></p>
+        </div>
+    </div>
+
     <!-- 顶部导航 -->
     <nav class="bg-gray-800 border-b border-gray-700 sticky top-0 z-50">
         <div class="max-w-7xl mx-auto px-4 py-3 flex items-center justify-between">
@@ -168,7 +301,7 @@
                             <h2 class="text-3xl font-bold mb-4">🎨 AI 绘画</h2>
                             <p class="text-gray-400 mb-6">输入提示词生成图片</p>
                             <div class="grid grid-cols-2 md:grid-cols-4 gap-3 max-w-2xl mx-auto">
-                                <button onclick="setPrompt('一只可爱的小猫咖')"
+                                <button onclick="setPrompt('一只可爱的小猫咪')"
                                     class="bg-gray-800 hover:bg-gray-700 rounded-lg p-3 transition">
                                     🐱 可爱小猫
                                 </button>
@@ -378,6 +511,101 @@
         let messages = [];
         let isGenerating = false;
         let imageHistory = [];
+        let currentLightboxIndex = 0;
+        let lightboxImages = [];
+
+        // Lightbox 功能
+        function openLightbox(url, prompt, model, index = 0, images = []) {
+            const lightbox = document.getElementById('lightbox');
+            const img = document.getElementById('lightbox-img');
+            const promptEl = document.getElementById('lightbox-prompt');
+            const metaEl = document.getElementById('lightbox-meta');
+            
+            img.src = url;
+            promptEl.textContent = prompt;
+            metaEl.textContent = model ? `模型: ${model}` : '';
+            
+            lightbox.classList.add('active');
+            document.body.style.overflow = 'hidden';
+            
+            // 设置导航
+            lightboxImages = images;
+            currentLightboxIndex = index;
+            updateLightboxNav();
+        }
+
+        function closeLightbox(event) {
+            if (event && event.target !== document.getElementById('lightbox')) return;
+            
+            const lightbox = document.getElementById('lightbox');
+            const img = document.getElementById('lightbox-img');
+            
+            lightbox.classList.remove('active');
+            document.body.style.overflow = '';
+            img.classList.remove('zoomed');
+        }
+
+        function zoomImage() {
+            const img = document.getElementById('lightbox-img');
+            img.classList.toggle('zoomed');
+        }
+
+        function toggleFullscreen() {
+            if (!document.fullscreenElement) {
+                document.getElementById('lightbox').requestFullscreen();
+            } else {
+                document.exitFullscreen();
+            }
+        }
+
+        function navigateImage(direction) {
+            currentLightboxIndex += direction;
+            if (currentLightboxIndex < 0) currentLightboxIndex = lightboxImages.length - 1;
+            if (currentLightboxIndex >= lightboxImages.length) currentLightboxIndex = 0;
+            
+            const item = lightboxImages[currentLightboxIndex];
+            const img = document.getElementById('lightbox-img');
+            const promptEl = document.getElementById('lightbox-prompt');
+            const metaEl = document.getElementById('lightbox-meta');
+            
+            img.src = item.url;
+            promptEl.textContent = item.prompt;
+            metaEl.textContent = item.model ? `模型: ${item.model}` : '';
+            img.classList.remove('zoomed');
+            
+            updateLightboxNav();
+        }
+
+        function updateLightboxNav() {
+            const prevBtn = document.getElementById('lightbox-prev');
+            const nextBtn = document.getElementById('lightbox-next');
+            
+            if (lightboxImages.length > 1) {
+                prevBtn.style.display = 'block';
+                nextBtn.style.display = 'block';
+            } else {
+                prevBtn.style.display = 'none';
+                nextBtn.style.display = 'none';
+            }
+        }
+
+        function downloadCurrentImage() {
+            const img = document.getElementById('lightbox-img');
+            const prompt = document.getElementById('lightbox-prompt').textContent;
+            downloadImage(img.src, prompt);
+        }
+
+        // 键盘快捷键
+        document.addEventListener('keydown', function(e) {
+            const lightbox = document.getElementById('lightbox');
+            if (!lightbox.classList.contains('active')) return;
+            
+            if (e.key === 'Escape') closeLightbox();
+            if (e.key === 'ArrowLeft') navigateImage(-1);
+            if (e.key === 'ArrowRight') navigateImage(1);
+            if (e.key === 'f' || e.key === 'F') toggleFullscreen();
+            if (e.key === 'z' || e.key === 'Z') zoomImage();
+        });
 
         // 加载历史记录
         function loadHistory() {
@@ -433,17 +661,14 @@
         function switchMode(mode) {
             currentMode = mode;
             
-            // 隐藏所有模式
             document.getElementById('chat-mode').classList.add('hidden');
             document.getElementById('image-mode').classList.add('hidden');
             document.getElementById('history-mode').classList.add('hidden');
             
-            // 隐藏所有设置
             document.getElementById('chat-settings').classList.add('hidden');
             document.getElementById('image-settings').classList.add('hidden');
             document.getElementById('history-settings').classList.add('hidden');
             
-            // 重置按钮样式
             document.getElementById('btn-chat').className = 'px-4 py-2 rounded-lg bg-gray-700 hover:bg-gray-600 transition';
             document.getElementById('btn-image').className = 'px-4 py-2 rounded-lg bg-gray-700 hover:bg-gray-600 transition';
             document.getElementById('btn-history').className = 'px-4 py-2 rounded-lg bg-gray-700 hover:bg-gray-600 transition';
@@ -476,16 +701,19 @@
             }
             
             empty.classList.add('hidden');
-            grid.innerHTML = imageHistory.reverse().map(item => `
-                <div class="bg-gray-800 rounded-lg overflow-hidden border border-gray-700 gallery-item">
+            const reversedHistory = [...imageHistory].reverse();
+            
+            grid.innerHTML = reversedHistory.map((item, index) => `
+                <div class="bg-gray-800 rounded-lg overflow-hidden border border-gray-700 gallery-item"
+                     onclick="openLightbox('${escapeHtml(item.url)}', '${escapeHtml(item.prompt)}', '${escapeHtml(item.model)}', ${index}, ${escapeHtml(JSON.stringify(reversedHistory))})">
                     <img src="${escapeHtml(item.url)}" alt="${escapeHtml(item.prompt)}" 
                          class="w-full aspect-square object-cover" loading="lazy">
                     <div class="gallery-overlay">
-                        <button onclick="downloadImage('${escapeHtml(item.url)}', '${escapeHtml(item.prompt)}')"
+                        <button onclick="event.stopPropagation(); downloadImage('${escapeHtml(item.url)}', '${escapeHtml(item.prompt)}')"
                             class="bg-blue-600 hover:bg-blue-700 rounded-lg px-3 py-2 text-sm">
                             ⬇️ 下载
                         </button>
-                        <button onclick="deleteHistoryItem('${item.id}')"
+                        <button onclick="event.stopPropagation(); deleteHistoryItem('${item.id}')"
                             class="bg-red-600 hover:bg-red-700 rounded-lg px-3 py-2 text-sm">
                             🗑️ 删除
                         </button>
@@ -493,7 +721,7 @@
                     <div class="p-3">
                         <p class="text-xs text-gray-400 line-clamp-2 mb-2">${escapeHtml(item.prompt)}</p>
                         <div class="flex justify-between text-xs text-gray-500">
-                            <span>${item.model}</span>
+                            <span>${escapeHtml(item.model)}</span>
                             <span>${new Date(item.timestamp).toLocaleDateString()}</span>
                         </div>
                     </div>
@@ -540,7 +768,7 @@
         // 随机提示词
         function randomPrompt() {
             const prompts = [
-                '一只戴着太空头盔的猫咉航员',
+                '一只戴着太空头盔的猫咪航员',
                 '未来赛博朋克风格的东京街道',
                 '梦幻般的水下城市，满是生物发光植物',
                 '一个精致的蒸汽朋克机器人',
@@ -553,7 +781,7 @@
             document.getElementById('image-prompt').value = random;
         }
 
-        // 发送聊天消息
+        // 发送聊天消息（省略，与之前相同）
         async function sendMessage() {
             const input = document.getElementById('chat-input');
             const content = input.value.trim();
@@ -732,6 +960,8 @@
             isGenerating = true;
             updateGenButton(true);
 
+            const generatedImages = [];
+
             for (let i = 0; i < numImages; i++) {
                 const cardId = addImagePlaceholder();
                 
@@ -765,14 +995,22 @@
                     
                     const urlMatch = content.match(/!\[.*?\]\((https?:\/\/[^\)]+)\)/);
                     if (urlMatch) {
-                        updateImageCard(cardId, urlMatch[1], prompt);
+                        const imageUrl = urlMatch[1];
+                        const originalPrompt = document.getElementById('image-prompt').value;
+                        updateImageCard(cardId, imageUrl, originalPrompt);
+                        
+                        generatedImages.push({
+                            url: imageUrl,
+                            prompt: originalPrompt,
+                            model: model
+                        });
                         
                         // 保存到历史
                         if (saveToHistory) {
                             imageHistory.push({
                                 id: `img_${Date.now()}_${i}`,
-                                url: urlMatch[1],
-                                prompt: document.getElementById('image-prompt').value,
+                                url: imageUrl,
+                                prompt: originalPrompt,
                                 model: model,
                                 style: style,
                                 size: size,
@@ -871,21 +1109,26 @@
                 return;
             }
 
+            card.className = 'bg-gray-800 rounded-lg overflow-hidden border border-gray-700 fade-in gallery-item';
+            card.onclick = function() { 
+                const model = document.getElementById('image-model').value;
+                openLightbox(url, prompt, model); 
+            };
+            
             card.innerHTML = `
                 <img src="${escapeHtml(url)}" alt="${escapeHtml(prompt)}" class="w-full aspect-square object-cover" loading="lazy">
+                <div class="gallery-overlay">
+                    <button onclick="event.stopPropagation(); openLightbox('${escapeHtml(url)}', '${escapeHtml(prompt)}', '${escapeHtml(document.getElementById('image-model').value)}')"
+                        class="bg-purple-600 hover:bg-purple-700 rounded-lg px-3 py-2 text-sm">
+                        🔍 查看
+                    </button>
+                    <button onclick="event.stopPropagation(); downloadImage('${escapeHtml(url)}', '${escapeHtml(prompt)}')"
+                        class="bg-blue-600 hover:bg-blue-700 rounded-lg px-3 py-2 text-sm">
+                        ⬇️ 下载
+                    </button>
+                </div>
                 <div class="p-3">
                     <p class="text-sm text-gray-400 line-clamp-2 mb-2">${escapeHtml(prompt)}</p>
-                    <div class="flex gap-2">
-                        <a href="${escapeHtml(url)}" download target="_blank" class="flex-1 text-center bg-blue-600 hover:bg-blue-700 rounded px-3 py-1 text-sm transition">
-                            ⬇️
-                        </a>
-                        <button onclick="copyImageUrl('${escapeHtml(url)}')" class="flex-1 bg-gray-700 hover:bg-gray-600 rounded px-3 py-1 text-sm transition">
-                            📋
-                        </button>
-                        <button onclick="shareImage('${escapeHtml(url)}', '${escapeHtml(prompt)}')" class="flex-1 bg-gray-700 hover:bg-gray-600 rounded px-3 py-1 text-sm transition">
-                            🔗
-                        </button>
-                    </div>
                 </div>
             `;
         }
