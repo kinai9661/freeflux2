@@ -23,6 +23,12 @@
 - **🔌 OpenAI 兼容**: 支持标准 `/v1/chat/completions` 接口
 - **📊 用量监控**: 实时跟踪请求数、流量、预估费用
 
+## 🌐 在线演示
+
+- **WebUI**: [https://fluxes.zeabur.app/chat](https://fluxes.zeabur.app/chat)
+- **监控面板**: [https://fluxes.zeabur.app](https://fluxes.zeabur.app)
+- **API 端点**: `https://fluxes.zeabur.app/v1/chat/completions`
+
 ## 🖥️ WebUI 预览
 
 ### 聊天界面
@@ -49,10 +55,8 @@
 
 ### 访问 WebUI
 
-部署完成后访问：
-
 ```
-https://your-service.zeabur.app/chat
+https://fluxes.zeabur.app/chat
 ```
 
 或在监控面板首页点击 **🎉 进入 WebUI** 按钮
@@ -92,12 +96,6 @@ cd freeflux2
 # 安装依赖
 npm install
 
-# 创建 .env 文件
-cp .env.example .env
-
-# 编辑 .env （可选）
-vim .env
-
 # 启动开发服务器
 npm run dev
 
@@ -114,48 +112,18 @@ npm run dev
 5. Zeabur 自动检测 `package.json` 并开始构建
 6. 等待 2-3 分钟部署完成
 
-#### 步骤 4: 配置环境变量（可选）
-
-在 Zeabur Dashboard 中选择你的服务 → **Variables** 标签页：
-
-```bash
-# 自定义 API 密钥（默认为 "1"）
-API_MASTER_KEY=your-secret-key
-
-# 添加 OpenAI 官方支持（可选）
-OPENAI_API_KEY=sk-xxx
-OPENAI_BASE_URL=https://api.openai.com/v1
-```
-
 ## 📚 使用文档
 
 ### 方式 1: WebUI（推荐新手）
 
-直接访问 `https://your-service.zeabur.app/chat`，无需编程即可使用：
-
-1. **聊天功能**
-   - 选择 AI 模型
-   - 输入问题
-   - 调整 Temperature（可选）
-   - 发送并查看流式响应
-
-2. **文生图功能**
-   - 切换到 "文生图" 标签
-   - 选择图片模型
-   - 输入提示词（支持中英文）
-   - 选择生成数量（1-4 张）
-   - 点击生成并等待结果
+直接访问 [https://fluxes.zeabur.app/chat](https://fluxes.zeabur.app/chat)，无需编程即可使用。
 
 ### 方式 2: API 调用（开发者）
-
-#### API 端点
-
-基础 URL: `https://your-service.zeabur.app`
 
 #### 1. 聊天完成
 
 ```bash
-curl https://your-service.zeabur.app/v1/chat/completions \
+curl https://fluxes.zeabur.app/v1/chat/completions \
   -H "Content-Type: application/json" \
   -H "Authorization: Bearer 1" \
   -d '{
@@ -170,7 +138,7 @@ curl https://your-service.zeabur.app/v1/chat/completions \
 #### 2. 文生图（同一接口）
 
 ```bash
-curl https://your-service.zeabur.app/v1/chat/completions \
+curl https://fluxes.zeabur.app/v1/chat/completions \
   -H "Content-Type: application/json" \
   -H "Authorization: Bearer 1" \
   -d '{
@@ -184,7 +152,7 @@ curl https://your-service.zeabur.app/v1/chat/completions \
 #### 3. 模型列表
 
 ```bash
-curl https://your-service.zeabur.app/v1/models \
+curl https://fluxes.zeabur.app/v1/models \
   -H "Authorization: Bearer 1"
 ```
 
@@ -194,8 +162,8 @@ curl https://your-service.zeabur.app/v1/models \
 from openai import OpenAI
 
 client = OpenAI(
-    api_key="1",  # 你的 API 密钥
-    base_url="https://your-service.zeabur.app/v1"
+    api_key="1",
+    base_url="https://fluxes.zeabur.app/v1"
 )
 
 # 聊天
@@ -216,7 +184,7 @@ print(image_response.choices[0].message.content)  # 返回 Markdown 图片链接
 ### JavaScript 示例
 
 ```javascript
-const response = await fetch('https://your-service.zeabur.app/v1/chat/completions', {
+const response = await fetch('https://fluxes.zeabur.app/v1/chat/completions', {
   method: 'POST',
   headers: {
     'Content-Type': 'application/json',
@@ -268,7 +236,7 @@ while (true) {
 
 ## 📊 用量监控
 
-访问首页 `https://your-service.zeabur.app` 实时查看：
+访问首页 [https://fluxes.zeabur.app](https://fluxes.zeabur.app) 实时查看：
 
 - ✅ 总请求数
 - ✅ 流量使用情况（进度条可视化）
@@ -336,22 +304,6 @@ AZURE_OPENAI_ENDPOINT=https://xxx.openai.azure.com
 AZURE_OPENAI_KEY=xxx
 ```
 
-### 自定义 WebUI 配置
-
-编辑 `public/chat.html` 文件：
-
-```javascript
-// 修改默认模型
-const DEFAULT_CHAT_MODEL = 'xai/grok-4-fast';
-const DEFAULT_IMAGE_MODEL = 'fal-ai/flux-2-pro';
-
-// 修改默认 Temperature
-const DEFAULT_TEMPERATURE = 0.7;
-
-// 修改主题色
-const PRIMARY_COLOR = '#3b82f6'; // Tailwind blue-500
-```
-
 ## 🐛 问题排查
 
 ### 1. 部署失败
@@ -386,6 +338,7 @@ const PRIMARY_COLOR = '#3b82f6'; // Tailwind blue-500
 
 ## 🔗 相关链接
 
+- **在线演示**: [https://fluxes.zeabur.app](https://fluxes.zeabur.app)
 - [Zeabur 官网](https://zeabur.com)
 - [Zeabur 文档](https://zeabur.com/docs)
 - [Typli AI](https://typli.ai)
